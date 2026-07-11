@@ -44,9 +44,11 @@ Built-in presets:
 | Provider | Base URL | Default model |
 | --- | --- | --- |
 | ChatGPT / OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-v4-flash` (thinking disabled) |
 | Tencent Hunyuan | `https://api.hunyuan.cloud.tencent.com/v1` | `hunyuan-turbos-latest` |
 | Custom | user supplied | user supplied |
+
+The model name is always an editable text field. The DeepSeek preset only fills in the current default, `deepseek-v4-flash`, so users can enter a future model name without waiting for an application update. DeepSeek translation requests explicitly send `"thinking":{"type":"disabled"}` to avoid reasoning mode for ordinary translation.
 
 Tencent Yuanbao itself is usually a consumer app, not a general third-party API. If you have Tencent model API access, use the Tencent Hunyuan preset or the custom OpenAI-compatible option.
 

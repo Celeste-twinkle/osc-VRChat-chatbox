@@ -44,9 +44,11 @@ Authorization: Bearer <api-key>
 | 服务 | Base URL | 默认模型 |
 | --- | --- | --- |
 | ChatGPT / OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| DeepSeek | `https://api.deepseek.com` | `deepseek-chat` |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-v4-flash`（关闭 thinking） |
 | 腾讯混元 | `https://api.hunyuan.cloud.tencent.com/v1` | `hunyuan-turbos-latest` |
 | 自定义 | 用户填写 | 用户填写 |
+
+模型名始终使用可编辑的文本输入框。DeepSeek 预设只负责填入当前默认值 `deepseek-v4-flash`，以后官方更换模型名时可直接手动覆盖，无需等待程序更新。翻译请求会为 DeepSeek 显式发送 `"thinking":{"type":"disabled"}`，避免普通翻译启用推理模式。
 
 如果你说的“元宝”是腾讯元宝 App，它通常不是面向第三方直接调用的通用 API。如果你有腾讯大模型 API Key，请使用“腾讯混元”预设或“自定义 OpenAI 兼容 API”。
 
