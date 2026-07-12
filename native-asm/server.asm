@@ -32,7 +32,7 @@ LANG_NEUTRAL = 0
 section '.text' code readable executable
 
 ; Keep this include order stable: it preserves the emitted code layout.
-; Module ownership and dependencies are documented in modules\README\.
+; Module ownership and dependencies are documented in modules.README\.
 include 'modules\bootstrap.inc'
 include 'modules\router.inc'
 include 'modules\settings.inc'

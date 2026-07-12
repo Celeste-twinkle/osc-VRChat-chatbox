@@ -50,5 +50,5 @@ includes the implementation modules under `modules/` in emitted-order. Keep
 that include order stable unless a deliberate binary layout change is wanted.
 
 Every `.inc` module has a corresponding Markdown document in
-`modules/README/`. Start with [the module map](modules/README/README.md) for
+`modules.README/`. Start with [the module map](modules.README/README.md) for
 responsibilities, dependencies, and the HTTP/OSC call flow.
