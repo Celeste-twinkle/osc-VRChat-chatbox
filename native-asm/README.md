@@ -42,3 +42,13 @@ native-asm\dist\vrc-chatbox-osc-asm.exe
 The HTML UI is embedded into the executable as plain text, so the release can be
 a single exe. That embedded HTML is only the page served to the user's existing
 browser, not a browser runtime.
+
+## Source layout
+
+`server.asm` is now a thin FASM entry file. It declares the PE sections and
+includes the implementation modules under `modules/` in emitted-order. Keep
+that include order stable unless a deliberate binary layout change is wanted.
+
+Every `.inc` module has a corresponding Markdown document in
+`modules/README/`. Start with [the module map](modules/README/README.md) for
+responsibilities, dependencies, and the HTTP/OSC call flow.
