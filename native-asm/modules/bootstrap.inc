@@ -6,7 +6,7 @@ start:
 
         invoke  socket,AF_INET,SOCK_DGRAM,IPPROTO_UDP
         mov     [osc_socket],eax
-        invoke  htons,9000
+        invoke  htons,[osc_port]
         mov     word [osc_addr+2],ax
         invoke  inet_addr,localhost
         mov     dword [osc_addr+4],eax
@@ -16,8 +16,13 @@ start:
         cmp     eax,INVALID_SOCKET
         je      exit
 
-        invoke  htons,19001
-        mov     word [server_addr+2],ax
+        ; Single-instance check: a named mutex is system-wide, so a second
+        ; process (even a different exe path) reliably detects the first.
+        invoke  CreateMutex,0,1,app_mutex
+        invoke  GetLastError
+        cmp     eax,ERROR_ALREADY_EXISTS
+        je      open_existing_and_exit
+
         invoke  GetCommandLine
         mov     esi,eax
         call    command_line_has_lan
@@ -35,11 +40,27 @@ bind_localhost:
         mov     dword [server_addr+4],eax
 
 bind_ready:
+        mov     dword [bind_tries],100
+.bind_retry:
+        invoke  htons,[server_port]
+        mov     word [server_addr+2],ax
         invoke  bind,[server_socket],server_addr,16
         cmp     eax,0
-        jne     open_existing_and_exit
+        je      .bound
+        inc     dword [server_port]
+        invoke  closesocket,[server_socket]
+        invoke  socket,AF_INET,SOCK_STREAM,IPPROTO_TCP
+        mov     [server_socket],eax
+        cmp     eax,INVALID_SOCKET
+        je      exit
+        dec     dword [bind_tries]
+        jnz     .bind_retry
+        jmp     open_existing_and_exit
+.bound:
+        call    build_url
         invoke  setsockopt,[server_socket],0FFFFh,1006h,accept_timeout,4
         invoke  listen,[server_socket],8
+        call    persist_running_port
 
         call    setup_tray
         invoke  GetCommandLine

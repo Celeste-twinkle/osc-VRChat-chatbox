@@ -118,15 +118,18 @@ label { display: block; color: var(--text2); font-size: 12px; margin: 0 0 5px; }
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
   margin-bottom: 12px; background: var(--surface2);
 }
+.lan > .lan-info { min-width: 0; flex: 1 1 auto; }
+.lan-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.lan b { font-size: 13px; white-space: nowrap; }
+.lan-note { display: block; margin-top: 3px; color: var(--text2); font-size: 12px; }
+.lan code { font-size: 13px; color: var(--accent-text); font-family: ui-monospace, Consolas, "Segoe UI", system-ui, sans-serif; }
+.lan-title code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lan-actions { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; min-width: 0; }
+.lan button { flex: 0 0 auto; min-width: 0; padding: 9px 12px; font-size: 13px; white-space: nowrap; }
 .toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--text); font-size: 13px; }
 .toggle input { width: auto; }
 .toggle.sub { margin-left: 24px; color: var(--text2); }
 .toggle:has(input:disabled) { opacity: 0.58; }
-.lan b { font-size: 13px; }
-.lan-note { display: block; margin-top: 3px; color: var(--text2); font-size: 12px; }
-.lan code { font-size: 13px; color: var(--accent-text); }
-.lan-actions { display: flex; gap: 8px; align-items: center; }
-.lan button { min-width: 0; padding: 9px 12px; font-size: 13px; }
 .a { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; margin-top: 14px; }
 .rw { display: flex; justify-content: flex-end; gap: 8px; }
 .g { min-width: 0; padding: 9px 12px; font-size: 13px; background: var(--btn2-bg); color: var(--btn2-text); }
@@ -179,8 +182,9 @@ button.r:hover { background: var(--danger-hover); }
   main { width: 100%; }
   header, .a, .row, .row2, .row3, .lan, .rw { align-items: stretch; grid-template-columns: 1fr; flex-direction: column; }
   .lan-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: stretch; }
-  .lan-actions code { grid-column: 1/-1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lan button { width: 100%; padding: 8px 6px; font-size: 12px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lan-title { flex-wrap: wrap; }
+  .lan-title code { white-space: normal; word-break: break-all; }
   #qrBtn.hide + #lanBtn { grid-column: span 2; }
   .quick { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin-bottom: 10px; }
   .quick label { font-size: 11px; margin-bottom: 4px; }

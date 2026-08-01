@@ -21,7 +21,8 @@ handle_heartbeat:
         jz      .done
         call    upsert_session
 .done:
-        invoke  send,[client_socket],http_204,http_204_len,0
+        call    build_heartbeat
+        invoke  send,[client_socket],heartbeat_resp,[heartbeat_resp_len],0
         jmp     close_client
 
 close_client:
@@ -32,13 +33,11 @@ exit:
         invoke  ExitProcess,0
 
 open_existing_and_exit:
-        invoke  GetCommandLine
-        mov     esi,eax
-        call    command_line_has_minimized
-        cmp     eax,1
-        je      .skip_open
-        invoke  ShellExecute,0,open_action,url,0,0,1
-.skip_open:
+        ; We're a second instance: an old one is already running (mutex) or
+        ; we couldn't bind. Tell the old instance to re-read settings.json
+        ; (it may have a new port configured), wait a moment for the
+        ; migration, then open the configured port in the browser and exit.
+        call    notify_old_instance
         invoke  closesocket,[server_socket]
         invoke  closesocket,[osc_socket]
         invoke  WSACleanup

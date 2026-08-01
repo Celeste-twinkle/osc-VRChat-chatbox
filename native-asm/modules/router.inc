@@ -3,18 +3,51 @@ accept_loop:
         cmp     dword [quit_requested],1
         je      shutdown_now
         call    cleanup_sessions
+        cmp     dword [port_pending],0
+        je      .no_mig
+        call    tick_port_migration
+.no_mig:
         mov     dword [readfds],1
         mov     eax,[server_socket]
         mov     [readfds+4],eax
+        cmp     dword [alt_socket],0
+        je      .no_alt
+        mov     dword [readfds],2
+        mov     eax,[alt_socket]
+        mov     [readfds+8],eax
+.no_alt:
         mov     dword [select_timeout],1
         mov     dword [select_timeout+4],0
         invoke  select,0,readfds,0,0,select_timeout
         cmp     eax,0
         jle     accept_loop
+        ; Select() rewrote readfds to contain only the ready sockets.
+        ; Accept the ready one -- never blindly accept server_socket, which
+        ; is blocking and would hang when only the alt socket has traffic.
+        mov     eax,[readfds+4]
+        cmp     eax,[server_socket]
+        je      .acc_server
+        cmp     dword [alt_socket],0
+        je      accept_loop
+        cmp     eax,[alt_socket]
+        jne     accept_loop
+        invoke  accept,[alt_socket],0,0
+        cmp     eax,INVALID_SOCKET
+        je      accept_loop
+        jmp     .have_client
+.acc_server:
         invoke  accept,[server_socket],0,0
         cmp     eax,INVALID_SOCKET
         je      accept_loop
-
+        ; A connection on the old port means at least one client is still
+        ; here -- keep the old port alive by bumping its last-activity time.
+        ; NOTE: save the accepted socket BEFORE GetTickCount (it clobbers
+        ; eax).
+        mov     [client_socket],eax
+        invoke  GetTickCount
+        mov     [old_last_activity],eax
+        mov     eax,[client_socket]
+.have_client:
         mov     [client_socket],eax
         mov     dword [shutdown_pending],0
         invoke  setsockopt,[client_socket],0FFFFh,1006h,recv_timeout,4
@@ -36,6 +69,10 @@ accept_loop:
         call    is_post_settings
         cmp     eax,1
         je      handle_post_settings
+
+        call    is_post_reload_settings
+        cmp     eax,1
+        je      handle_reload_settings
 
         call    is_get_history
         cmp     eax,1
@@ -195,6 +232,13 @@ handle_post_settings:
         jmp     close_client
 .settings_valid:
         call    parse_settings_flags
+        call    update_osc_port
         call    update_startup_setting
+        call    try_port_migration
+        invoke  send,[client_socket],http_204,http_204_len,0
+        jmp     close_client
+
+handle_reload_settings:
+        call    try_port_migration
         invoke  send,[client_socket],http_204,http_204_len,0
         jmp     close_client

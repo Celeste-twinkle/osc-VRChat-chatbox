@@ -9,6 +9,7 @@ SOCK_DGRAM   = 2
 IPPROTO_TCP  = 6
 IPPROTO_UDP  = 17
 INVALID_SOCKET = -1
+ERROR_ALREADY_EXISTS = 0B7h
 session_slots = 16
 WM_COMMAND = 0111h
 WM_USER = 0400h
@@ -46,6 +47,7 @@ include 'modules\sessions.inc'
 include 'modules\http.inc'
 include 'modules\lan-discovery.inc'
 include 'modules\osc.inc'
+include 'modules\migration.inc'
 
 section '.data' data readable writeable
 ; Data remains in its original order so code and resource offsets stay stable.
