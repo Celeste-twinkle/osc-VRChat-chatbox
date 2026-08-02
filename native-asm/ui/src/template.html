@@ -117,14 +117,19 @@
             <div class="wrap"><textarea id="text" autofocus placeholder="输入要直接发送到 VRChat Chatbox 的文字。"></textarea><span
                     id="cnt" class="cnt">0/144</span></div>
             <div class="a">
-                <div class="h" id="hint">Enter 发送，Shift + Enter 换行</div><button id="button" type="button">发送</button>
+                <div class="h" id="hint">Enter 发送，Shift + Enter 换行</div>
+                <div class="sends"><button id="trButton" class="send-tr" type="button">翻译发送</button><button
+                        id="button" class="send-direct" type="button">发送</button></div>
                 <div class="rw"><button id="clearBubble" class="g" type="button">清除气泡</button><button id="clearBtn"
                         class="r" type="button">清空</button></div>
             </div>
             <div class="m" id="message"></div>
-            <div id="hbar" class="hbar hide"><button id="exportHistory" class="x" type="button">导出历史</button></div>
-            <div id="hnote" class="hnote hide"></div>
-            <div id="hlist" class="hlist"></div>
+            <div class="hscroll">
+                <div id="hbar" class="hbar hide"><button id="clearHistory" class="r" type="button">清空历史</button><button
+                        id="exportHistory" class="x" type="button">导出历史</button></div>
+                <div id="hnote" class="hnote hide"></div>
+                <div id="hlist" class="hlist"></div>
+            </div>
         </section>
     </main>
     <script>

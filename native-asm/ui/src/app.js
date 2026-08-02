@@ -3,6 +3,7 @@
 (function () {
 const byId = (id) => document.getElementById(id),
   button = byId("button"),
+  trButton = byId("trButton"),
   text = byId("text"),
   message = byId("message"),
   status = byId("status"),
@@ -59,6 +60,7 @@ const byId = (id) => document.getElementById(id),
   hbar = byId("hbar"),
   hnote = byId("hnote"),
   exportHistory = byId("exportHistory"),
+  clearHistory = byId("clearHistory"),
   settingsBtn = byId("settingsBtn"),
   settingsModal = byId("settingsModal"),
   settingsClose = byId("settingsClose");
@@ -67,11 +69,17 @@ let timer = 0,
   history = [],
   hidCounter = 0,
   longPressTimer = 0,
-  longPressFired = false,
+  tapTimer = 0,
+  pressBothTimer = 0,
+  pressStart = 0,
+  pressHid = -1,
+  pressPart = "",
+  pressEl = null,
+  lastTapHid = -1,
+  lastTapTime = 0,
   busy = false,
   lanAllowed = false,
   lanIps = [],
-  historyDraft = 0,
   serverPort = ""; // learned from heartbeat X-Port header
 function curPort() {
   // When the page is viewed through a tunnel (a.natt.ctrla.top:25034) the
@@ -143,8 +151,12 @@ const I18N = {
     fmtTrans: "仅译文",
     fmtOrig: "仅原文（不翻译）",
     send: "发送",
+    directSend: "直接发送",
     translateSend: "翻译发送",
     clear: "清空",
+    clearHistory: "清空历史",
+    clearHistoryConfirm: "确定清空全部历史记录？",
+    historyCleared: "历史记录已清空。",
     enterSend: "Enter 发送，Shift + Enter 换行",
     enterAction: "Enter {action}，Shift + Enter 换行",
     phDirect: "输入要直接发送到 VRChat Chatbox 的文字。",
@@ -182,7 +194,7 @@ const I18N = {
       "已填入历史发送内容，可编辑后手动发送",
     exportHistory: "导出历史",
     historyTapHint:
-      "点按历史项可填入原文+译文，编辑后发送不会自动重新翻译；长按直接重发。",
+      "单击填入对应栏（原文/译文），双击填入两者；短按发送对应栏，长按（进度条满）一起发送。",
     resending: "重发中...",
     resent: "已重发到 VRChat。",
     resentStatus: "刚刚重发成功",
@@ -218,8 +230,12 @@ const I18N = {
     fmtTrans: "Translation only",
     fmtOrig: "Original only (no translation)",
     send: "Send",
+    directSend: "Direct send",
     translateSend: "Translate + send",
     clear: "Clear",
+    clearHistory: "Clear history",
+    clearHistoryConfirm: "Clear all history?",
+    historyCleared: "History cleared.",
     enterSend: "Enter to send, Shift + Enter for newline",
     enterAction: "Enter to {action}, Shift + Enter for newline",
     phDirect: "Type text to send directly to VRChat Chatbox.",
@@ -259,7 +275,7 @@ const I18N = {
       "History content restored. Edit if needed, then send manually.",
     exportHistory: "Export history",
     historyTapHint:
-      "Tap a history item to fill original + translation; edits send as typed without auto-translating. Long press resends directly.",
+      "Tap a column to fill it (source/translation); double-tap fills both. Short press sends that column; long press (full bar) sends both.",
     resending: "Resending...",
     resent: "Resent to VRChat.",
     resentStatus: "Resent just now",
@@ -296,8 +312,12 @@ const I18N = {
     fmtTrans: "翻訳のみ",
     fmtOrig: "原文のみ（翻訳しない）",
     send: "送信",
+    directSend: "直接送信",
     translateSend: "翻訳して送信",
     clear: "クリア",
+    clearHistory: "履歴をクリア",
+    clearHistoryConfirm: "履歴をすべてクリアしますか？",
+    historyCleared: "履歴をクリアしました。",
     enterSend: "Enterで送信、Shift + Enterで改行",
     enterAction: "Enterで{action}、Shift + Enterで改行",
     phDirect: "VRChat Chatbox に直接送信する文字を入力します。",
@@ -335,7 +355,7 @@ const I18N = {
     historyResendReady: "履歴の内容を入力欄に戻しました。必要なら編集して手動で送信してください。",
     exportHistory: "履歴をエクスポート",
     historyTapHint:
-      "履歴項目をタップすると原文+訳を入力欄に入れます（編集後の送信では自動翻訳しません）。長押しで再送信します。",
+      "タップで対応する欄（原文/翻訳）を入力、ダブルタップで両方入力。短押しでその欄を送信、長押し（バー満タン）で両方送信。",
     resending: "再送信中...",
     resent: "VRChatへ再送信しました。",
     resentStatus: "再送信しました",
@@ -372,8 +392,12 @@ const I18N = {
     fmtTrans: "번역만",
     fmtOrig: "원문만(번역 안 함)",
     send: "전송",
+    directSend: "직접 전송",
     translateSend: "번역 후 전송",
     clear: "지우기",
+    clearHistory: "히스토리 지우기",
+    clearHistoryConfirm: "히스토리를 모두 지우시겠습니까?",
+    historyCleared: "히스토리를 지웠습니다.",
     enterSend: "Enter 전송, Shift + Enter 줄바꿈",
     enterAction: "Enter {action}, Shift + Enter 줄바꿈",
     phDirect: "VRChat Chatbox로 바로 보낼 문장을 입력하세요.",
@@ -412,7 +436,7 @@ const I18N = {
       "히스토리 내용을 입력창에 넣었습니다. 필요하면 수정 후 수동으로 전송하세요.",
     exportHistory: "히스토리 내보내기",
     historyTapHint:
-      "히스토리 항목을 탭하면 원문+번역이 입력됩니다(편집 후 전송 시 자동 번역 안 함). 길게 누르면 재전송합니다.",
+      "클릭하면 해당 칸(원문/번역) 입력, 더블클릭하면 둘 다 입력. 짧게 누르면 해당 칸 전송, 길게(진행바 가득) 누르면 둘 다 전송.",
     resending: "재전송 중...",
     resent: "VRChat에 재전송했습니다.",
     resentStatus: "방금 재전송됨",
@@ -531,9 +555,12 @@ function beat() {
 beat();
 setInterval(beat, 3000);
 function setTyping(on) {
+  // Single request per state change: sendBeacon + fetch would double-send
+  // the "false" close signal on every stop-typing transition.
   if (!on) {
     try {
       navigator.sendBeacon && navigator.sendBeacon("/typing", "false");
+      return;
     } catch (e) {}
   }
   fetch("/typing", {
@@ -543,6 +570,9 @@ function setTyping(on) {
   }).catch(function () {});
 }
 function sendTyping() {
+  // Only report "typing" while there is actual text: focus alone (e.g. after
+  // a button click refocuses the box for the next input) must not keep the
+  // typing indicator alive.
   setTyping(!!text.value.trim());
 }
 window.addEventListener("pagehide", function () {
@@ -553,6 +583,7 @@ function openSettings() {
 }
 function closeSettings() {
   settingsModal.className = "modal hide";
+  text.focus();
 }
 settingsBtn.addEventListener("click", openSettings);
 settingsClose.addEventListener("click", closeSettings);
@@ -639,6 +670,7 @@ function openQr() {
 }
 function closeQr() {
   qrModal.className = "modal hide";
+  text.focus();
 }
 qrBtn.addEventListener("click", openQr);
 qrChoice.addEventListener("change", function () {
@@ -840,13 +872,22 @@ function drawQr(c, txt) {
 function showBoxes() {
   let on = trOn.checked,
     mm = provider.value === "mymemory",
-    f = format.value;
+    f = format.value,
+    trg = on && f !== "orig"; // translation actually happens
   trBox.className = on ? "" : "hide";
   quickTr.className = on ? "quick" : "quick hide";
   mmBox.className = on && mm ? "row" : "row hide";
   aiBox.className = on && !mm ? "row" : "row hide";
-  let lb = f === "orig" ? L("send") : L("translateSend");
-  button.textContent = on ? lb : L("send");
+  // Two always-predictable buttons: [直接发送] sends the box verbatim,
+  // [翻译发送] translates it. When translation is off (or format is
+  // orig-only) the translate button disappears so it can't mislead.
+  trButton.className = trg ? "send-tr" : "send-tr hide";
+  button.textContent = trg ? L("directSend") : L("send");
+  // Direct-send colour follows its role: when translation is on it is a
+  // secondary bypass (grey); when it is the only send button it becomes the
+  // primary accent so it reads as the main action.
+  button.className = trg ? "send-direct" : "send-direct primary";
+  let lb = trg ? L("translateSend") : L("send");
   hint.textContent = on
     ? L("enterAction").replace("{action}", lb)
     : L("enterSend");
@@ -965,6 +1006,7 @@ function quickTranslateChanged() {
   syncSettingsFromQuick();
   showBoxes();
   save();
+  text.focus();
 }
 function settingsTranslateChanged() {
   syncQuickFromSettings();
@@ -1038,38 +1080,32 @@ async function trAI(v) {
     ? j.choices[0].message.content
     : "";
 }
-async function sendText() {
+async function sendText(direct) {
   const v = text.value.trim();
   if (!v) {
     message.textContent = L("empty");
     message.className = "m e";
+    text.focus();
     return;
   }
   busy = true;
   button.disabled = true;
-  message.textContent = trOn.checked ? L("translating") : L("sending");
+  trButton.disabled = true;
+  message.textContent = direct || !trOn.checked ? L("sending") : L("translating");
   message.className = "m";
   try {
     await save();
-    let direct = historyDraft,
-      tv = "",
+    let tv = "",
       out = "";
-    if (direct) {
+    if (direct || !trOn.checked || format.value === "orig") {
+      // Direct send: the box content goes out verbatim. This also covers
+      // translation-off and orig-only formats.
       out = v;
     } else {
-      if (trOn.checked && format.value !== "orig") {
-        tv = await tr(v);
-      }
-      if (trOn.checked && format.value !== "orig" && !tv) {
-        throw Error("empty trans");
-      }
-      if (trOn.checked) {
-        if (format.value === "trans") out = tv;
-        else if (format.value === "orig") out = v;
-        else out = v + "\n" + tv;
-      } else {
-        out = v;
-      }
+      tv = await tr(v);
+      if (!tv) throw Error("empty trans");
+      if (format.value === "trans") out = tv;
+      else out = v + "\n" + tv;
     }
     const r = await fetch("/send", {
       method: "POST",
@@ -1080,13 +1116,12 @@ async function sendText() {
     var h = {
       hid: ++hidCounter,
       text: v,
-      trans: direct ? "" : tv,
+      trans: tv,
       src: src.value,
       dst: dst.value,
       fmt: direct ? "orig" : format.value,
       time: new Date().toLocaleTimeString(),
     };
-    historyDraft = 0;
     history.unshift(h);
     prependHistoryItem(h);
     trimHistory();
@@ -1097,11 +1132,7 @@ async function sendText() {
     clearInterval(typingTimer);
     typingTimer = 0;
     setTyping(false);
-    message.textContent = direct
-      ? L("sent")
-      : trOn.checked
-        ? L("sentTrans")
-        : L("sent");
+    message.textContent = tv ? L("sentTrans") : L("sent");
     status.textContent = L("sentStatus");
   } catch (e) {
     message.textContent =
@@ -1109,7 +1140,7 @@ async function sendText() {
         ? L("missingAI")
         : e.message === "empty trans"
           ? L("emptyTrans")
-          : historyDraft
+          : direct
             ? L("sendFail")
             : trOn.checked
               ? L("transFail")
@@ -1119,13 +1150,16 @@ async function sendText() {
   } finally {
     busy = false;
     button.disabled = false;
+    trButton.disabled = false;
     text.focus();
   }
 }
 text.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    sendText();
+    // Enter follows the main action: translate when the translate button is
+    // visible, otherwise direct send.
+    sendText(trButton.className.indexOf("hide") >= 0);
   }
 });
 text.addEventListener("input", function () {
@@ -1144,13 +1178,13 @@ text.addEventListener("input", function () {
   count.textContent = n + "/144";
   count.style.color = n > 144 ? "#ef4444" : "#9ca3af";
 });
-button.addEventListener("click", sendText);
+button.addEventListener("click", () => sendText(true));
+trButton.addEventListener("click", () => sendText(false));
 lanBtn.addEventListener("click", enableLan);
 exportHistory.addEventListener("click", function () {
   if (!history.length) return;
   let data = history
-      .slice()
-      .reverse()
+      .slice()      .reverse()
       .map(
         (h) => "[" + h.time + "] " + h.text + (h.trans ? "\n" + h.trans : ""),
       )
@@ -1162,9 +1196,20 @@ exportHistory.addEventListener("click", function () {
   a.download = "vrc-chatbox-history.txt";
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  text.focus();
+});
+clearHistory.addEventListener("click", function () {
+  if (!history.length) return;
+  if (!confirm(L("clearHistoryConfirm"))) return;
+  history = [];
+  hlist.innerHTML = "";
+  syncHistoryBar();
+  saveHistory();
+  message.textContent = L("historyCleared");
+  message.className = "m";
+  text.focus();
 });
 clearBtn.addEventListener("click", function () {
-  historyDraft = 0;
   text.value = "";
   text.focus();
   count.textContent = "0/144";
@@ -1175,6 +1220,7 @@ clearBtn.addEventListener("click", function () {
 });
 clearBubble.addEventListener("click", async function () {
   button.disabled = true;
+  trButton.disabled = true;
   message.textContent = "清除中...";
   message.className = "m";
   try {
@@ -1192,27 +1238,8 @@ clearBubble.addEventListener("click", async function () {
     status.textContent = L("badConn");
   } finally {
     button.disabled = false;
-  }
-});
-clearBubble.addEventListener("click", async function () {
-  button.disabled = true;
-  message.textContent = "清除中...";
-  message.className = "m";
-  try {
-    var r = await fetch("/send", {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: "",
-    });
-    if (!r.ok) throw Error();
-    message.textContent = "已清除气泡。";
-    status.textContent = L("sentStatus");
-  } catch (e) {
-    message.textContent = "清除失败。";
-    message.className = "m e";
-    status.textContent = L("badConn");
-  } finally {
-    button.disabled = false;
+    trButton.disabled = false;
+    text.focus();
   }
 });
 function saveHistory() {
@@ -1278,22 +1305,33 @@ function buildItemHTML(h) {
     escTrans = esc(h.trans),
     t = esc(h.time);
   return (
-    '<div class="hitem" id="hitem-' +
+    '<div class="hitem' +
+    (h.trans ? "" : " no-trans") +
+    '" id="hitem-' +
     h.hid +
-    '" ' +
-    'onpointerdown="startLongPress(event,' +
+    '">' +
+    '<span class="htext"><span class="hsrc" ' +
+    'onpointerdown="cellDown(event,' +
     h.hid +
-    ')" ' +
-    'onpointerup="endLongPress(event,' +
+    ",'src')" +
+    '" onpointerup="cellUp(event,' +
     h.hid +
-    ')" ' +
-    'onpointercancel="cancelLongPress()" onpointerleave="cancelLongPress()">' +
-    '<span class="htext"><span class="hsrc">' +
+    ",'src')" +
+    '" onpointercancel="cellCancel()" onpointerleave="cellCancel()">' +
     escText +
     "</span>" +
-    '<span class="htrans">' +
-    escTrans +
-    "</span></span>" +
+    (h.trans
+      ? '<span class="htrans" onpointerdown="cellDown(event,' +
+        h.hid +
+        ",'trans')" +
+        '" onpointerup="cellUp(event,' +
+        h.hid +
+        ",'trans')" +
+        '" onpointercancel="cellCancel()" onpointerleave="cellCancel()">' +
+        escTrans +
+        "</span>"
+      : "") +
+    "</span>" +
     '<span class="htime">' +
     t +
     "</span>" +
@@ -1315,49 +1353,114 @@ function trimHistory() {
   }
   syncHistoryBar();
 }
-function startLongPress(e, hid) {
+/* History cell gestures.
+   Each item splits into source/translation columns. A column:
+   - tap       -> fill only that column's text
+   - doubletap -> fill original + translation
+   - longpress -> send only that column's text
+   - hold >1.2s-> send original + translation
+   This is fully decoupled from the [翻译格式] setting. */
+function cellDown(e, hid, part) {
   e.preventDefault();
+  e.stopPropagation();
   clearTimeout(longPressTimer);
-  longPressFired = false;
-  var el = byId("hitem-" + hid);
-  if (el) {
-    // Remove-then-add forces the CSS progress animation to restart on
-    // repeated long presses of the same item.
-    el.classList.remove("pressing");
-    void el.offsetWidth;
-    el.classList.add("pressing");
-  }
-  longPressTimer = setTimeout(function () {
-    longPressFired = true;
-    if (el) el.classList.remove("pressing");
-    resendFromHistory(hid);
+  clearTimeout(tapTimer);
+  clearTimeout(pressBothTimer);
+  pressHid = hid;
+  pressPart = part;
+  pressStart = Date.now();
+  pressEl = e.currentTarget;
+  var item = pressEl.closest(".hitem");
+  if (item) item.classList.remove("press-both");
+  pressEl.classList.remove("pressing");
+  void pressEl.offsetWidth;
+  pressEl.classList.add("pressing");
+  // At 600 ms the pressed column is full -> start the neighbour column's
+  // progress bar (both = 1.2 s total).
+  pressBothTimer = setTimeout(function () {
+    if (item) item.classList.add("press-both");
   }, 600);
 }
-function endLongPress(e, hid) {
+function cellUp(e, hid, part) {
   e.preventDefault();
+  e.stopPropagation();
   clearTimeout(longPressTimer);
-  var el = byId("hitem-" + hid);
-  if (el) el.classList.remove("pressing");
-  if (!longPressFired) {
-    fillResendFromHistory(hid);
+  clearTimeout(pressBothTimer);
+  if (pressEl && pressHid === hid && pressPart === part) {
+    pressEl.classList.remove("pressing");
+    var item = pressEl.closest(".hitem");
+    if (item) item.classList.remove("press-both");
+    pressEl = null;
+  } else {
+    return;
+  }
+  var dt = Date.now() - pressStart;
+  if (dt < 600) {
+    // Tap or double-tap (within 250 ms of the previous tap on any column).
+    if (lastTapHid === hid && Date.now() - lastTapTime < 250) {
+      clearTimeout(tapTimer);
+      fillCell(hid, null); // both
+      lastTapHid = -1;
+    } else {
+      lastTapHid = hid;
+      lastTapTime = Date.now();
+      tapTimer = setTimeout(function () {
+        fillCell(hid, part);
+        lastTapHid = -1;
+      }, 250);
+    }
+  } else if (dt < 1200) {
+    lastTapHid = -1;
+    resendCell(hid, part); // single column
+  } else {
+    lastTapHid = -1;
+    resendCell(hid, null); // both
   }
 }
-function cancelLongPress() {
+function cellCancel() {
   clearTimeout(longPressTimer);
-  var els = document.querySelectorAll(".hitem.pressing");
-  for (var j = 0; j < els.length; j++) els[j].classList.remove("pressing");
+  clearTimeout(tapTimer);
+  clearTimeout(pressBothTimer);
+  if (pressEl) {
+    pressEl.classList.remove("pressing");
+    var item = pressEl.closest(".hitem");
+    if (item) item.classList.remove("press-both");
+    pressEl = null;
+  }
 }
-function composeOut(h) {
-  if (!trOn.checked || format.value === "orig") return h.text;
-  if (format.value === "trans") return h.trans || h.text;
-  return h.text + (h.trans ? "\n" + h.trans : "");
+function cellContent(h, part) {
+  return part === "trans" && h.trans ? h.trans : h.text;
 }
-async function resendFromHistory(hid) {
+function fillCell(hid, part) {
   var i = findByHid(hid);
   if (i < 0) return;
   var h = history[i],
-    out = composeOut(h);
+    out = part === null ? cellContentBoth(h) : cellContent(h, part);
+  text.value = out;
+  text.focus();
+  // Fill counts as typing: kick the typing indicator immediately so the
+  // session/typing state matches the restored content.
+  clearTimeout(timer);
+  timer = setTimeout(sendTyping, 50);
+  if (text.value.trim()) {
+    if (!typingTimer) typingTimer = setInterval(sendTyping, 5000);
+  }
+  var n = out.length;
+  count.textContent = n + "/144";
+  count.style.color = n > 144 ? "#ef4444" : "#9ca3af";
+  message.textContent = L("historyResendReady");
+  message.className = "m";
+}
+function cellContentBoth(h) {
+  return h.text + (h.trans ? "\n" + h.trans : "");
+}
+async function resendCell(hid, part) {
+  var i = findByHid(hid);
+  if (i < 0) return;
+  var h = history[i],
+    out = part === null ? cellContentBoth(h) : cellContent(h, part);
   button.disabled = true;
+  trButton.disabled = true;
   message.textContent = L("resending");
   message.className = "m";
   try {
@@ -1375,21 +1478,9 @@ async function resendFromHistory(hid) {
     status.textContent = L("badConn");
   } finally {
     button.disabled = false;
+    trButton.disabled = false;
+    text.focus();
   }
-}
-function fillResendFromHistory(hid) {
-  var i = findByHid(hid);
-  if (i < 0) return;
-  var h = history[i],
-    out = composeOut(h);
-  historyDraft = 1;
-  text.value = out;
-  text.focus();
-  var n = out.length;
-  count.textContent = n + "/144";
-  count.style.color = n > 144 ? "#ef4444" : "#9ca3af";
-  message.textContent = L("historyResendReady");
-  message.className = "m";
 }
 function delHistory(hid) {
   var i = findByHid(hid);
@@ -1434,10 +1525,22 @@ applyTheme(currentTheme());
 renderThemeIcon(currentTheme());
 document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 
+/* Clicking blank space (not a control) returns focus to the input box so
+   the user can keep typing without an extra click. */
+document.addEventListener("click", function (e) {
+  var t = e.target;
+  if (t === text) return; // already focused
+  if (t.closest(".hitem") || t.closest("button") || t.closest("select") ||
+      t.closest("input") || t.closest("textarea") || t.closest(".modal")) {
+    return; // handled elsewhere / interactive element keeps its focus
+  }
+  text.focus();
+});
+
 /* Expose the handlers referenced by inline HTML in buildItemHTML().
    They must live on window because they are called from generated strings. */
-window.startLongPress = startLongPress;
-window.endLongPress = endLongPress;
-window.cancelLongPress = cancelLongPress;
+window.cellDown = cellDown;
+window.cellUp = cellUp;
+window.cellCancel = cellCancel;
 window.delHistory = delHistory;
 })();
