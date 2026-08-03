@@ -139,9 +139,27 @@ json_find_key:
         ret
 
 persist_running_port:
-        ; Re-write settings.json so its "runningPort" field reflects the port
-        ; this process is actually listening on. The next instance reads it
-        ; to find us. Called on startup and after each migration.
+        ; Keep the internal locator synchronized with the socket that is
+        ; currently authoritative.
+        mov     eax,[server_port]
+        mov     edi,json_running_key
+        mov     edx,json_running_key_len
+        jmp     persist_port_value
+
+persist_configured_port:
+        ; Runtime conflict fallback may choose a different port from the one
+        ; requested. Keep the user-visible setting synchronized with it.
+        mov     eax,[new_port]
+        mov     edi,json_port_key
+        mov     edx,json_port_key_len
+
+persist_port_value:
+        ; eax = value, edi = JSON key including colon, edx = key length.
+        ; Rewrites only that numeric field and leaves the rest of the compact
+        ; settings object untouched.
+        mov     [persist_value],eax
+        mov     [persist_key],edi
+        mov     [persist_key_len],edx
         invoke  CreateFile,settings_file,80000000h,1,0,3,80h,0
         cmp     eax,-1
         je      .done
@@ -154,8 +172,8 @@ persist_running_port:
         mov     [settings_write_len],eax
         mov     dword [body_ptr],settings_buf
 
-        ; digits of server_port -> num_tmp (forward order)
-        mov     eax,[server_port]
+        ; digits of the selected value -> num_tmp (forward order)
+        mov     eax,[persist_value]
         xor     ecx,ecx
 .digits:
         xor     edx,edx
@@ -174,10 +192,10 @@ persist_running_port:
         mov     byte [edi],0
         mov     eax,edi
         sub     eax,num_tmp
-        mov     [new_port],eax          ; digit length
+        mov     [num_len],eax
 
-        mov     edi,json_running_key
-        mov     edx,json_running_key_len
+        mov     edi,[persist_key]
+        mov     edx,[persist_key_len]
         call    json_find_key
         test    eax,eax
         jnz     .replace
@@ -204,10 +222,14 @@ persist_running_port:
 .need_comma:
         mov     ebx,1
 .have_comma:
-        mov     eax,[new_port]
+        mov     eax,[num_len]
         add     eax,ebx
-        add     eax,edx
+        add     eax,[persist_key_len]
         mov     [tmp_len],eax           ; insert length
+        mov     eax,[settings_write_len]
+        add     eax,[tmp_len]
+        cmp     eax,settings_buf_size
+        ja      .done
         ; shift [ '}' .. end ] right by insert length
         mov     esi,[num_ptr]
         mov     ecx,[body_ptr]
@@ -229,11 +251,11 @@ persist_running_port:
         mov     al,','
         stosb
 .no_comma:
-        mov     esi,json_running_key
-        mov     ecx,edx
+        mov     esi,[persist_key]
+        mov     ecx,[persist_key_len]
         rep     movsb
         mov     esi,num_tmp
-        mov     ecx,[new_port]
+        mov     ecx,[num_len]
         rep     movsb
         mov     eax,[settings_write_len]
         add     eax,[tmp_len]
@@ -243,7 +265,7 @@ persist_running_port:
 .replace:
         ; key exists: eax = its position; replace the number after it.
         mov     esi,eax
-        add     esi,edx                 ; esi = right after the key
+        add     esi,[persist_key_len]   ; esi = right after the key
         ; Skip whitespace: external editors may write '"key": 123'
 .skip_ws:
         mov     al,[esi]
@@ -276,13 +298,16 @@ persist_running_port:
         add     ebx,[settings_write_len]
         sub     ebx,edi                 ; tail length
         mov     eax,[tmp_len]
-        mov     ecx,[new_port]
+        mov     ecx,[num_len]
         sub     eax,ecx                 ; delta = old_len - new_len
         jz      .copy_new
         jg      .shrink
         ; grow: shift tail right by -delta
         neg     eax
         mov     edx,eax
+        add     eax,[settings_write_len]
+        cmp     eax,settings_buf_size
+        ja      .done
         mov     esi,edi
         mov     edi,esi
         add     edi,edx
@@ -306,10 +331,10 @@ persist_running_port:
 .copy_new:
         mov     edi,[num_ptr]
         mov     esi,num_tmp
-        mov     ecx,[new_port]
+        mov     ecx,[num_len]
         rep     movsb
         mov     eax,[settings_write_len]
-        add     eax,[new_port]
+        add     eax,[num_len]
         sub     eax,[tmp_len]
         mov     [settings_write_len],eax
 
@@ -324,19 +349,19 @@ persist_running_port:
         ret
 
 notify_old_instance:
-        ; Read settings.json for "port" (target) and "runningPort" (where
-        ; the old instance actually listens). Connect to runningPort, POST
-        ; /reload-settings so it re-reads settings and migrates, then wait
-        ; briefly and open the target port in the browser.
+        ; Read the old instance's actual listener from runningPort, then POST
+        ; /reload-settings so it can apply a newly configured target. The
+        ; caller opens this known-good listener; its heartbeat will redirect
+        ; local pages if a hot migration is in progress.
         invoke  CreateFile,settings_file,80000000h,1,0,3,80h,0
         cmp     eax,-1
-        je      .open_target
+        je      .build_running_url
         mov     [settings_handle],eax
         invoke  ReadFile,[settings_handle],settings_buf,settings_buf_size,bytes_done,0
         invoke  CloseHandle,[settings_handle]
         mov     eax,[bytes_done]
         test    eax,eax
-        jz      .open_target
+        jz      .build_running_url
         mov     [settings_write_len],eax
         mov     dword [body_ptr],settings_buf
 
@@ -345,21 +370,14 @@ notify_old_instance:
         mov     edx,json_running_key_len
         call    json_get_number
         test    eax,eax
-        jz      .open_target
+        jz      .build_running_url
         mov     [notify_port],eax
-        ; target port
-        mov     edi,json_port_key
-        mov     edx,json_port_key_len
-        call    json_get_number
-        test    eax,eax
-        jz      .open_target
-        mov     [target_port],eax
 
         ; connect to the old instance
         invoke  socket,AF_INET,SOCK_STREAM,IPPROTO_TCP
         mov     [notify_sock],eax
         cmp     eax,INVALID_SOCKET
-        je      .open_target
+        je      .build_running_url
         invoke  htons,[notify_port]
         mov     word [notify_addr+2],ax
         invoke  inet_addr,localhost
@@ -370,15 +388,12 @@ notify_old_instance:
         ; POST /reload-settings
         invoke  send,[notify_sock],reload_request,reload_request_len,0
         invoke  closesocket,[notify_sock]
-        jmp     .open_target
+        jmp     .build_running_url
 .close_sock:
         invoke  closesocket,[notify_sock]
 
-.open_target:
-        ; Wait for the old instance to start migrating (it needs ~1.5s).
-        invoke  Sleep,1500
-        ; Build http://127.0.0.1:<target_port>
-        mov     eax,[target_port]
+.build_running_url:
+        mov     eax,[notify_port]
         test    eax,eax
         jz      .use_server
         jmp     .have_port
@@ -387,7 +402,6 @@ notify_old_instance:
 .have_port:
         mov     [server_port],eax
         call    build_url
-        invoke  ShellExecute,0,open_action,url,0,0,1
         ret
 
 build_url:
@@ -550,14 +564,18 @@ try_port_migration:
         ret
 
 start_migration_to:
-        ; Start a migration to the port in eax. Opens the alt listener and
-        ; sets port_pending/old_last_activity. Returns eax=0 on failure.
+        ; Start a migration to the port in eax. If that port is occupied,
+        ; scan upward for at most 100 candidates and persist the selected
+        ; fallback. Opens the alt listener and sets port_pending/activity.
+        ; Returns eax=0 only when no candidate can be opened.
         mov     [new_port],eax
+        mov     dword [bind_tries],100
+.retry:
         invoke  socket,AF_INET,SOCK_STREAM,IPPROTO_TCP
         mov     [alt_socket],eax
         cmp     eax,INVALID_SOCKET
-        je      .fail
-        invoke  setsockopt,[alt_socket],0FFFFh,4,reuse_opt,4
+        je      .give_up
+        invoke  setsockopt,[alt_socket],0FFFFh,SO_EXCLUSIVEADDRUSE,reuse_opt,4
         invoke  htons,[new_port]
         mov     word [alt_addr+2],ax
         mov     eax,[lan_enabled]
@@ -571,21 +589,31 @@ start_migration_to:
 .bind:
         invoke  bind,[alt_socket],alt_addr,16
         cmp     eax,0
-        jne     .fail
+        jne     .try_next
         invoke  setsockopt,[alt_socket],0FFFFh,1006h,accept_timeout,4
         invoke  listen,[alt_socket],8
+        cmp     eax,0
+        jne     .try_next
+        call    persist_configured_port
         mov     eax,[new_port]
         mov     [port_pending],eax
         invoke  GetTickCount
         mov     [old_last_activity],eax
         mov     eax,1
         ret
-.fail:
-        cmp     dword [alt_socket],0
-        je      .done
+.try_next:
         invoke  closesocket,[alt_socket]
         mov     dword [alt_socket],0
-.done:
+        cmp     dword [new_port],65535
+        jae     .give_up
+        inc     dword [new_port]
+        dec     dword [bind_tries]
+        jnz     .retry
+.give_up:
+        ; Keep settings truthful if every candidate failed.
+        mov     eax,[server_port]
+        mov     [new_port],eax
+        call    persist_configured_port
         xor     eax,eax
         ret
 

@@ -42,11 +42,14 @@ bind_localhost:
 bind_ready:
         mov     dword [bind_tries],100
 .bind_retry:
+        invoke  setsockopt,[server_socket],0FFFFh,SO_EXCLUSIVEADDRUSE,reuse_opt,4
         invoke  htons,[server_port]
         mov     word [server_addr+2],ax
         invoke  bind,[server_socket],server_addr,16
         cmp     eax,0
         je      .bound
+        cmp     dword [server_port],65535
+        jae     .bind_failed
         inc     dword [server_port]
         invoke  closesocket,[server_socket]
         invoke  socket,AF_INET,SOCK_STREAM,IPPROTO_TCP
@@ -55,7 +58,9 @@ bind_ready:
         je      exit
         dec     dword [bind_tries]
         jnz     .bind_retry
-        jmp     open_existing_and_exit
+        jmp     exit
+.bind_failed:
+        jmp     exit
 .bound:
         call    build_url
         invoke  setsockopt,[server_socket],0FFFFh,1006h,accept_timeout,4

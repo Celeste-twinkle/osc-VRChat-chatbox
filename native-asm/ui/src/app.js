@@ -72,7 +72,13 @@ let timer = 0,
   lanAllowed = false,
   lanIps = [],
   historyDraft = 0,
-  serverPort = ""; // learned from heartbeat X-Port header
+  serverPort = "", // learned from heartbeat X-Port header
+  configuredPort = 19001,
+  configuredOscPort = 9000;
+function validPort(v, fallback) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1024 && n <= 65535 ? n : fallback;
+}
 function curPort() {
   // When the page is viewed through a tunnel (a.natt.ctrla.top:25034) the
   // location.port is the tunnel port, not the server's real port. Prefer the
@@ -176,7 +182,7 @@ const I18N = {
     qrCurrent: "当前页面地址",
     qrCustom: "手动输入",
     historyLimit: "历史记录上限",
-    port: "端口（重启后生效）",
+    port: "HTTP 端口（保存后生效）",
     oscPort: "OSC 端口（9000）",
     historyResendReady:
       "已填入历史发送内容，可编辑后手动发送",
@@ -253,7 +259,7 @@ const I18N = {
     qrCurrent: "Current page URL",
     qrCustom: "Manual input",
     historyLimit: "History limit",
-    port: "Port (takes effect after restart)",
+    port: "HTTP port (applies after save)",
     oscPort: "OSC port (9000)",
     historyResendReady:
       "History content restored. Edit if needed, then send manually.",
@@ -330,7 +336,7 @@ const I18N = {
     qrCurrent: "現在のページURL",
     qrCustom: "手動入力",
     historyLimit: "履歴の上限",
-    port: "ポート（再起動後に有効）",
+    port: "HTTPポート（保存後に有効）",
     oscPort: "OSCポート（9000）",
     historyResendReady: "履歴の内容を入力欄に戻しました。必要なら編集して手動で送信してください。",
     exportHistory: "履歴をエクスポート",
@@ -406,7 +412,7 @@ const I18N = {
     qrCurrent: "현재 페이지 URL",
     qrCustom: "수동 입력",
     historyLimit: "히스토리 상한",
-    port: "포트(재시작 후 적용)",
+    port: "HTTP 포트(저장 후 적용)",
     oscPort: "OSC 포트(9000)",
     historyResendReady:
       "히스토리 내용을 입력창에 넣었습니다. 필요하면 수정 후 수동으로 전송하세요.",
@@ -896,8 +902,10 @@ async function load() {
     startup.checked = !!j.startup;
     startMinimized.checked = !!j.startMinimized;
     lanAllowed = !!j.lan;
-    port.value = j.port || 19001;
-    oscPort.value = j.oscPort || 9000;
+    configuredPort = validPort(j.port, 19001);
+    configuredOscPort = validPort(j.oscPort, 9000);
+    port.value = configuredPort;
+    oscPort.value = configuredOscPort;
     syncStartup();
     preset(false);
     applyLang();
@@ -909,6 +917,10 @@ async function load() {
 async function save() {
   clearTimeout(timer);
   syncStartup();
+  const nextPort = validPort(port.value, configuredPort),
+    nextOscPort = validPort(oscPort.value, configuredOscPort);
+  port.value = nextPort;
+  oscPort.value = nextOscPort;
   const j = {
     translate: trOn.checked,
     src: src.value,
@@ -925,15 +937,18 @@ async function save() {
     startup: startup.checked,
     startMinimized: startMinimized.checked,
     lan: lanAllowed,
-    port: parseInt(port.value, 10) || 19001,
-    oscPort: parseInt(oscPort.value, 10) || 9000,
+    port: nextPort,
+    oscPort: nextOscPort,
   };
   try {
-    await fetch("/settings", {
+    const r = await fetch("/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(j),
     });
+    if (!r.ok) throw Error();
+    configuredPort = nextPort;
+    configuredOscPort = nextOscPort;
   } catch (e) {}
 }
 uiLang.addEventListener("change", () => {

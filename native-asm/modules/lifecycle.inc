@@ -33,11 +33,17 @@ exit:
         invoke  ExitProcess,0
 
 open_existing_and_exit:
-        ; We're a second instance: an old one is already running (mutex) or
-        ; we couldn't bind. Tell the old instance to re-read settings.json
-        ; (it may have a new port configured), wait a moment for the
-        ; migration, then open the configured port in the browser and exit.
+        ; We're a second instance: tell the old process to re-read
+        ; settings.json (it may have a new port configured), then open the
+        ; known running listener unless this launch requested minimized mode.
         call    notify_old_instance
+        invoke  GetCommandLine
+        mov     esi,eax
+        call    command_line_has_minimized
+        cmp     eax,1
+        je      .skip_open
+        invoke  ShellExecute,0,open_action,url,0,0,1
+.skip_open:
         invoke  closesocket,[server_socket]
         invoke  closesocket,[osc_socket]
         invoke  WSACleanup

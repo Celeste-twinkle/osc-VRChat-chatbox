@@ -235,6 +235,10 @@ handle_post_settings:
         call    update_osc_port
         call    update_startup_setting
         call    try_port_migration
+        ; The browser writes a fresh settings object and does not carry the
+        ; internal runningPort field. Restore it after every successful save
+        ; so a duplicate launch can always locate this process.
+        call    persist_running_port
         invoke  send,[client_socket],http_204,http_204_len,0
         jmp     close_client
 

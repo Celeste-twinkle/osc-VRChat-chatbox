@@ -10,9 +10,12 @@ old_last_activity dd 0
 pending_next dd 0
 bind_tries dd 100
 notify_port dd 0
-target_port dd 0
 notify_sock dd 0
 alt_socket dd 0
+persist_key dd 0
+persist_key_len dd 0
+persist_value dd 0
+num_len dd 0
 app_instance dd 0
 tray_hwnd dd 0
 tray_icon dd 0
