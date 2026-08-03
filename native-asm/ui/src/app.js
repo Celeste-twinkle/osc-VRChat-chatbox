@@ -1112,27 +1112,6 @@ clearBubble.addEventListener("click", async function () {
     button.disabled = false;
   }
 });
-clearBubble.addEventListener("click", async function () {
-  button.disabled = true;
-  message.textContent = "清除中...";
-  message.className = "m";
-  try {
-    var r = await fetch("/send", {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: "",
-    });
-    if (!r.ok) throw Error();
-    message.textContent = "已清除气泡。";
-    status.textContent = L("sentStatus");
-  } catch (e) {
-    message.textContent = "清除失败。";
-    message.className = "m e";
-    status.textContent = L("badConn");
-  } finally {
-    button.disabled = false;
-  }
-});
 function saveHistory() {
   try {
     localStorage.setItem(historyKey, JSON.stringify(history));
