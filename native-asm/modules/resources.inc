@@ -25,16 +25,16 @@ icon app_icon_group,\
 versioninfo version_info,VOS_NT_WINDOWS32,VFT_APP,VFT2_UNKNOWN,0409h,04E4h,\
             'CompanyName','osc-VRChat-chatbox',\
             'FileDescription','VRChat Chatbox OSC local helper',\
-            'FileVersion','1.0.0.0',\
+            'FileVersion','2.3.0.0',\
             'InternalName','vrc-chatbox-osc.exe',\
             'OriginalFilename','vrc-chatbox-osc.exe',\
             'ProductName','VRC Chatbox OSC',\
-            'ProductVersion','1.0.0.0'
+            'ProductVersion','2.3.0.0'
 
 resdata app_manifest
   db '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',13,10
   db '<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">',13,10
-  db '  <assemblyIdentity version="1.0.0.0" processorArchitecture="x86" name="VRCChatboxOSC" type="win32"/>',13,10
+  db '  <assemblyIdentity version="2.3.0.0" processorArchitecture="x86" name="VRCChatboxOSC" type="win32"/>',13,10
   db '  <description>VRChat Chatbox OSC local helper</description>',13,10
   db '  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">',13,10
   db '    <security>',13,10
