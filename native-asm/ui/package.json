@@ -1,0 +1,12 @@
+{
+  "name": "vrc-chatbox-osc-ui",
+  "private": true,
+  "description": "Embedded HTML UI for the VRC Chatbox OSC native exe. Vanilla JS source, minified at build time with esbuild.",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}
