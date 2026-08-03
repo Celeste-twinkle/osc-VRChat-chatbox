@@ -8,7 +8,7 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 
 ## Features
 
-- Single executable release, currently about 51 KB.
+- Single executable release, currently about 90 KB.
 - Uses the system default browser for the UI.
 - UI copy supports automatic Chinese, English, Japanese, and Korean adaptation, and can be changed manually in Settings.
 - Creates a Windows notification-area tray icon after startup. Right-click it to open the UI, toggle LAN access, toggle Windows startup and minimized startup, or exit the background service.
@@ -25,6 +25,8 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 - Free public translation through MyMemory.
 - Optional MyMemory email for a higher free quota, and optional MyMemory key for private TM/authenticated usage.
 - Optional AI translation through OpenAI-compatible chat completion APIs.
+- AI mode can use the system default prompt or save, edit, delete, and switch between up to 6 custom prompt templates. The local service stores them in `prompts.json`, so they remain available after restart and from other devices using the same service.
+- Inputs without natural-language letters, such as numbers, symbols, or emoji only, are sent unchanged without calling a translation API. The default AI prompt also requires untranslatable input to be returned verbatim.
 - Page heartbeat: each page creates its own session id and sends periodic heartbeats.
 - The background service does not exit automatically when pages are closed or heartbeats stop; use the tray menu to exit it.
 - If an old service is already running, launching the exe again skips server startup and only opens the existing page.
@@ -85,6 +87,14 @@ settings.json
 ```
 
 This file may contain your API key or MyMemory key. Do not copy it, upload it, commit it, or send it to anyone.
+
+Custom AI prompt templates are stored beside the executable in:
+
+```text
+prompts.json
+```
+
+This file may contain your custom instructions. Do not copy, upload, commit, or share either local data file.
 
 ## Usage
 
@@ -151,7 +161,7 @@ The release asset should contain only:
 vrc-chatbox-osc.exe
 ```
 
-Do not include `settings.json` in a release package.
+Do not include `settings.json` or `prompts.json` in a release package.
 
 ## License
 

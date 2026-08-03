@@ -144,6 +144,71 @@ write_history:
         invoke  CloseHandle,[settings_handle]
         jmp     send_no_content
 
+serve_prompts:
+        invoke  CreateFile,prompts_file,80000000h,1,0,3,80h,0
+        cmp     eax,-1
+        je      .empty
+        mov     [settings_handle],eax
+        invoke  ReadFile,[settings_handle],recv_buf,recv_buf_size-1,bytes_done,0
+        invoke  CloseHandle,[settings_handle]
+        invoke  send,[client_socket],http_200_json,http_200_json_len,0
+        mov     eax,[bytes_done]
+        test    eax,eax
+        jz      .empty_body
+        invoke  send,[client_socket],recv_buf,[bytes_done],0
+        ret
+.empty:
+        invoke  send,[client_socket],http_200_json,http_200_json_len,0
+.empty_body:
+        invoke  send,[client_socket],empty_prompts_json,empty_prompts_json_len,0
+        ret
+
+write_prompts:
+        call    find_body
+        test    eax,eax
+        jz      send_no_content
+        mov     esi,eax
+        mov     [body_ptr],esi
+        call    parse_content_length
+        mov     [content_len],eax
+        mov     ecx,[recv_len]
+        sub     ecx,[body_ptr]
+        add     ecx,recv_buf
+        mov     [body_have],ecx
+.read_more:
+        mov     eax,[body_have]
+        cmp     eax,[content_len]
+        jge     .len_ready
+        mov     eax,recv_buf
+        add     eax,[recv_len]
+        mov     edx,recv_buf_size-1
+        sub     edx,[recv_len]
+        jle     .len_ready
+        invoke  recv,[client_socket],eax,edx,0
+        cmp     eax,0
+        jle     .len_ready
+        add     [recv_len],eax
+        add     [body_have],eax
+        jmp     .read_more
+.len_ready:
+        mov     ecx,[content_len]
+        cmp     ecx,[body_have]
+        jle     .have_ok
+        mov     ecx,[body_have]
+.have_ok:
+        cmp     ecx,recv_buf_size-1
+        jle     .size_ok
+        mov     ecx,recv_buf_size-1
+.size_ok:
+        mov     [settings_write_len],ecx
+        invoke  CreateFile,prompts_file,40000000h,0,0,2,80h,0
+        cmp     eax,-1
+        je      send_no_content
+        mov     [settings_handle],eax
+        invoke  WriteFile,[settings_handle],[body_ptr],[settings_write_len],bytes_done,0
+        invoke  CloseHandle,[settings_handle]
+        jmp     send_no_content
+
 serve_settings:
         invoke  CreateFile,settings_file,80000000h,1,0,3,80h,0
         cmp     eax,-1

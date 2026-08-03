@@ -1,4 +1,5 @@
 settings.json
+prompts.json
 *.zip
 native-asm/dist/
 native-asm/release/

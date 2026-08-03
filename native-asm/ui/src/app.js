@@ -63,8 +63,19 @@ const byId = (id) => document.getElementById(id),
   clearHistory = byId("clearHistory"),
   settingsBtn = byId("settingsBtn"),
   settingsModal = byId("settingsModal"),
-  settingsClose = byId("settingsClose");
+  settingsClose = byId("settingsClose"),
+  promptLabel = byId("promptLabel"),
+  promptSelect = byId("promptSelect"),
+  promptNew = byId("promptNew"),
+  promptDelete = byId("promptDelete"),
+  promptEditor = byId("promptEditor"),
+  promptNameLabel = byId("promptNameLabel"),
+  promptContentLabel = byId("promptContentLabel"),
+  promptName = byId("promptName"),
+  promptContent = byId("promptContent"),
+  promptHint = byId("promptHint");
 let timer = 0,
+  promptTimer = 0,
   typingTimer = 0,
   history = [],
   hidCounter = 0,
@@ -81,7 +92,9 @@ let timer = 0,
   lanIps = [],
   serverPort = "", // learned from heartbeat X-Port header
   configuredPort = 19001,
-  configuredOscPort = 9000;
+  configuredOscPort = 9000,
+  aiPrompts = [],
+  activePromptId = "";
 function validPort(v, fallback) {
   const n = Number(v);
   return Number.isInteger(n) && n >= 1024 && n <= 65535 ? n : fallback;
@@ -102,6 +115,70 @@ function normLanUrl(v) {
 const historyKey = "vrcChatboxHistory",
   historyLimitKey = "vrcChatboxHistoryLimit",
   lanUrlKey = "vrcChatboxLanUrl";
+const SYSTEM_PROMPT_ID = "",
+  PROMPT_LIMIT = 6,
+  PROMPT_CONTENT_LIMIT = 2500,
+  DEFAULT_AI_PROMPT =
+    "You are a translation engine. Translate the user text from {source} to {target}. Return only the translated text, with no quotes, labels, or commentary. If the input contains no translatable natural-language text or cannot be translated, return the original text unchanged.";
+let translatableLetter;
+try {
+  translatableLetter = new RegExp("\\p{L}", "u");
+} catch (e) {
+  translatableLetter =
+    /[A-Za-z\u00c0-\u02af\u0370-\u052f\u0590-\u1fff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/;
+}
+function hasTranslatableText(v) {
+  return translatableLetter.test(v);
+}
+function cleanPrompt(p, i) {
+  if (!p || typeof p !== "object") return null;
+  let id = typeof p.id === "string" ? p.id.slice(0, 48) : "";
+  if (!id || id === SYSTEM_PROMPT_ID) id = newPromptId();
+  return {
+    id: id,
+    name: String(p.name || "").slice(0, 48) || L("promptUntitled") + " " + (i + 1),
+    content: String(p.content || "").slice(0, PROMPT_CONTENT_LIMIT),
+  };
+}
+function newPromptId() {
+  return (
+    "p" +
+    Date.now().toString(36) +
+    Math.random().toString(36).slice(2, 8)
+  ).slice(0, 48);
+}
+function activePrompt() {
+  for (let i = 0; i < aiPrompts.length; i++)
+    if (aiPrompts[i].id === activePromptId) return aiPrompts[i];
+  return null;
+}
+function renderPromptManager() {
+  const selected = activePrompt();
+  promptSelect.innerHTML = "";
+  promptSelect.add(new Option(L("systemPrompt"), SYSTEM_PROMPT_ID));
+  for (let i = 0; i < aiPrompts.length; i++)
+    promptSelect.add(
+      new Option(aiPrompts[i].name || L("promptUntitled"), aiPrompts[i].id),
+    );
+  if (!selected) activePromptId = SYSTEM_PROMPT_ID;
+  promptSelect.value = activePromptId;
+  const p = activePrompt();
+  promptEditor.className = p ? "prompt-editor" : "prompt-editor hide";
+  promptName.value = p ? p.name : "";
+  promptContent.value = p ? p.content : "";
+  promptDelete.disabled = !p;
+  promptNew.disabled = aiPrompts.length >= PROMPT_LIMIT;
+  promptHint.textContent =
+    (p ? L("promptHintCustom") : L("promptHintDefault")) +
+    (aiPrompts.length >= PROMPT_LIMIT ? " " + L("promptLimit") : "");
+}
+function resolvedPrompt() {
+  const p = activePrompt(),
+    template = p && p.content.trim() ? p.content : DEFAULT_AI_PROMPT;
+  return template
+    .replace(/\{source\}/g, src.value)
+    .replace(/\{target\}/g, dst.value);
+}
 function getHistoryLimit() {
   let n = parseInt(
     localStorage.getItem(historyLimitKey) || histLimit.value || "100",
@@ -151,6 +228,21 @@ const I18N = {
     aiEndpoint: "AI Base URL，例如 https://api.openai.com/v1",
     aiModel: "模型，例如 gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiPrompt: "AI 提示词",
+    systemPrompt: "系统默认提示词",
+    newPrompt: "新建",
+    deletePrompt: "删除",
+    promptName: "提示词名称",
+    promptContent: "提示词内容",
+    promptNamePlaceholder: "例如：简洁翻译",
+    promptContentPlaceholder: "输入发送给 AI 的系统提示词",
+    promptHintDefault:
+      "系统默认提示词会处理当前语言，并在没有可翻译文本时原样返回。",
+    promptHintCustom:
+      "支持 {source} 和 {target} 占位符。空内容会回退到系统默认提示词。",
+    promptUntitled: "未命名提示词",
+    promptLimit: "最多可保存 6 个提示词。",
+    promptDeleteConfirm: "删除当前提示词？",
     format: "翻译格式",
     fmtBoth: "原文 + 译文",
     fmtTrans: "仅译文",
@@ -231,6 +323,21 @@ const I18N = {
     aiEndpoint: "AI Base URL, e.g. https://api.openai.com/v1",
     aiModel: "Model, e.g. gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiPrompt: "AI prompt",
+    systemPrompt: "System default prompt",
+    newPrompt: "New",
+    deletePrompt: "Delete",
+    promptName: "Prompt name",
+    promptContent: "Prompt content",
+    promptNamePlaceholder: "For example: Concise translation",
+    promptContentPlaceholder: "Enter the system prompt sent to the AI",
+    promptHintDefault:
+      "The system default uses the current languages and returns input unchanged when there is no translatable text.",
+    promptHintCustom:
+      "Use {source} and {target} placeholders. Empty content falls back to the system default.",
+    promptUntitled: "Untitled prompt",
+    promptLimit: "You can save up to 6 prompts.",
+    promptDeleteConfirm: "Delete the current prompt?",
     format: "Send format",
     fmtBoth: "Original + translation",
     fmtTrans: "Translation only",
@@ -314,6 +421,21 @@ const I18N = {
     aiEndpoint: "AI Base URL 例: https://api.openai.com/v1",
     aiModel: "モデル 例: gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiPrompt: "AIプロンプト",
+    systemPrompt: "システム既定のプロンプト",
+    newPrompt: "新規",
+    deletePrompt: "削除",
+    promptName: "プロンプト名",
+    promptContent: "プロンプト内容",
+    promptNamePlaceholder: "例：簡潔な翻訳",
+    promptContentPlaceholder: "AIに送信するシステムプロンプト",
+    promptHintDefault:
+      "システム既定では現在の言語を使用し、翻訳できる文字がない場合は原文を返します。",
+    promptHintCustom:
+      "{source} と {target} を使用できます。空の場合はシステム既定に戻ります。",
+    promptUntitled: "無題のプロンプト",
+    promptLimit: "保存できるプロンプトは6件までです。",
+    promptDeleteConfirm: "現在のプロンプトを削除しますか？",
     format: "送信形式",
     fmtBoth: "原文 + 翻訳",
     fmtTrans: "翻訳のみ",
@@ -395,6 +517,21 @@ const I18N = {
     aiEndpoint: "AI Base URL 예: https://api.openai.com/v1",
     aiModel: "모델 예: gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiPrompt: "AI 프롬프트",
+    systemPrompt: "시스템 기본 프롬프트",
+    newPrompt: "새로 만들기",
+    deletePrompt: "삭제",
+    promptName: "프롬프트 이름",
+    promptContent: "프롬프트 내용",
+    promptNamePlaceholder: "예: 간결한 번역",
+    promptContentPlaceholder: "AI에 보낼 시스템 프롬프트",
+    promptHintDefault:
+      "시스템 기본값은 현재 언어를 사용하며 번역할 텍스트가 없으면 원문을 반환합니다.",
+    promptHintCustom:
+      "{source} 및 {target} 자리표시자를 사용할 수 있습니다. 비어 있으면 시스템 기본값을 사용합니다.",
+    promptUntitled: "이름 없는 프롬프트",
+    promptLimit: "프롬프트는 최대 6개까지 저장할 수 있습니다.",
+    promptDeleteConfirm: "현재 프롬프트를 삭제할까요?",
     format: "전송 형식",
     fmtBoth: "원문 + 번역",
     fmtTrans: "번역만",
@@ -507,6 +644,15 @@ function applyLang() {
   endpoint.placeholder = L("aiEndpoint");
   model.placeholder = L("aiModel");
   key.placeholder = L("aiKey");
+  tx(promptLabel, "aiPrompt");
+  tx(promptNew, "newPrompt");
+  tx(promptDelete, "deletePrompt");
+  tx(promptNameLabel, "promptName");
+  tx(promptContentLabel, "promptContent");
+  promptName.placeholder = L("promptNamePlaceholder");
+  promptContent.placeholder = L("promptContentPlaceholder");
+  promptName.setAttribute("aria-label", L("promptName"));
+  promptContent.setAttribute("aria-label", L("promptContent"));
   tx(fmtLabel, "format");
   opt(format, 0, "fmtBoth");
   opt(format, 1, "fmtTrans");
@@ -517,6 +663,7 @@ function applyLang() {
   tx(clearBtn, "clear");
   tx(exportHistory, "exportHistory");
   tx(hnote, "historyTapHint");
+  renderPromptManager();
   setLanState(qrBtn.dataset.ip || "127.0.0.1", qrBtn.dataset.fail === "1");
   showBoxes();
   if (history.length) renderHistory();
@@ -887,7 +1034,7 @@ function showBoxes() {
   trBox.className = on ? "" : "hide";
   quickTr.className = on ? "quick" : "quick hide";
   mmBox.className = on && mm ? "row" : "row hide";
-  aiBox.className = on && !mm ? "row" : "row hide";
+  aiBox.className = on && !mm ? "" : "hide";
   // Two always-predictable buttons: [直接发送] sends the box verbatim,
   // [翻译发送] translates it. When translation is off (or format is
   // orig-only) the translate button disappears so it can't mislead.
@@ -925,6 +1072,50 @@ function preset(force) {
 function syncStartup() {
   startMinimized.disabled = !startup.checked;
   if (!startup.checked) startMinimized.checked = false;
+}
+async function loadPrompts() {
+  try {
+    const r = await fetch("/prompts"),
+      j = await r.json(),
+      raw = Array.isArray(j.items) ? j.items : [],
+      seen = {};
+    aiPrompts = raw
+      .slice(0, PROMPT_LIMIT)
+      .map(cleanPrompt)
+      .filter(function (p) {
+        if (!p || seen[p.id]) return false;
+        seen[p.id] = true;
+        return true;
+      });
+    activePromptId =
+      typeof j.activeId === "string" &&
+      aiPrompts.some((p) => p.id === j.activeId)
+        ? j.activeId
+        : SYSTEM_PROMPT_ID;
+  } catch (e) {
+    aiPrompts = [];
+    activePromptId = SYSTEM_PROMPT_ID;
+  }
+  renderPromptManager();
+}
+async function savePrompts() {
+  clearTimeout(promptTimer);
+  const body = JSON.stringify({
+    activeId: activePromptId,
+    items: aiPrompts.slice(0, PROMPT_LIMIT),
+  });
+  try {
+    const r = await fetch("/prompts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body,
+    });
+    if (!r.ok) throw Error();
+  } catch (e) {}
+}
+function queuePromptSave() {
+  clearTimeout(promptTimer);
+  promptTimer = setTimeout(savePrompts, 600);
 }
 async function load() {
   try {
@@ -1052,6 +1243,50 @@ provider.addEventListener("change", () => {
     timer = setTimeout(save, 600);
   }),
 );
+promptSelect.addEventListener("change", function () {
+  activePromptId = promptSelect.value;
+  renderPromptManager();
+  savePrompts();
+});
+promptNew.addEventListener("click", function () {
+  if (aiPrompts.length >= PROMPT_LIMIT) {
+    promptHint.textContent = L("promptLimit");
+    return;
+  }
+  const p = {
+    id: newPromptId(),
+    name: L("promptUntitled") + " " + (aiPrompts.length + 1),
+    content: DEFAULT_AI_PROMPT,
+  };
+  aiPrompts.push(p);
+  activePromptId = p.id;
+  renderPromptManager();
+  promptName.focus();
+  promptName.select();
+  savePrompts();
+});
+promptDelete.addEventListener("click", function () {
+  const p = activePrompt();
+  if (!p || !confirm(L("promptDeleteConfirm"))) return;
+  aiPrompts = aiPrompts.filter((item) => item.id !== p.id);
+  activePromptId = SYSTEM_PROMPT_ID;
+  renderPromptManager();
+  savePrompts();
+});
+promptName.addEventListener("input", function () {
+  const p = activePrompt();
+  if (!p) return;
+  p.name = promptName.value.slice(0, 48);
+  const option = Array.from(promptSelect.options).find((o) => o.value === p.id);
+  if (option) option.textContent = p.name || L("promptUntitled");
+  queuePromptSave();
+});
+promptContent.addEventListener("input", function () {
+  const p = activePrompt();
+  if (!p) return;
+  p.content = promptContent.value.slice(0, PROMPT_CONTENT_LIMIT);
+  queuePromptSave();
+});
 async function tr(v) {
   if (provider.value !== "mymemory") return trAI(v);
   let u =
@@ -1085,10 +1320,7 @@ async function trAI(v) {
       messages: [
         {
           role: "system",
-          content:
-            "Translate the user text to " +
-            dst.value +
-            ". Return only the translation.",
+          content: resolvedPrompt(),
         },
         { role: "user", content: v },
       ],
@@ -1108,18 +1340,27 @@ async function sendText(direct) {
     text.focus();
     return;
   }
+  const canTranslate = hasTranslatableText(v);
   busy = true;
   button.disabled = true;
   trButton.disabled = true;
-  message.textContent = direct || !trOn.checked ? L("sending") : L("translating");
+  message.textContent =
+    direct || !trOn.checked || !canTranslate
+      ? L("sending")
+      : L("translating");
   message.className = "m";
   try {
     await save();
     let tv = "",
       out = "";
-    if (direct || !trOn.checked || format.value === "orig") {
+    if (
+      direct ||
+      !trOn.checked ||
+      format.value === "orig" ||
+      !canTranslate
+    ) {
       // Direct send: the box content goes out verbatim. This also covers
-      // translation-off and orig-only formats.
+      // translation-off, orig-only formats, and inputs with no letters.
       out = v;
     } else {
       tv = await tr(v);
@@ -1542,6 +1783,7 @@ syncStartup();
 syncSettingsFromQuick();
 loadHistory();
 applyLang();
+loadPrompts();
 load();
 refreshLan();
 

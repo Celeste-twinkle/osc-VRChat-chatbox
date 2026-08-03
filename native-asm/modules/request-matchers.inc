@@ -52,6 +52,24 @@ is_post_history:
         movzx   eax,al
         ret
 
+is_get_prompts:
+        mov     esi,recv_buf
+        mov     edi,get_prompts
+        mov     ecx,get_prompts_len
+        repe    cmpsb
+        sete    al
+        movzx   eax,al
+        ret
+
+is_post_prompts:
+        mov     esi,recv_buf
+        mov     edi,post_prompts
+        mov     ecx,post_prompts_len
+        repe    cmpsb
+        sete    al
+        movzx   eax,al
+        ret
+
 is_post_session_open:
         mov     esi,recv_buf
         mov     edi,post_session_open

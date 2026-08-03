@@ -82,10 +82,25 @@
                         <div id="mmBox" class="row"><input id="mmEmail" placeholder="MyMemory email，可提升免费额度"><input
                                 id="mmKey" placeholder="MyMemory key，可选"><a class="linkbtn" target="_blank"
                                 href="https://mymemory.translated.net/doc/keygen.php">获取 MyMemory key</a></div>
-                        <div id="aiBox" class="row hide"><input id="endpoint"
-                                placeholder="AI Base URL，例如 https://api.openai.com/v1"><input id="model"
-                                placeholder="模型，例如 gpt-4o-mini / deepseek-chat"><input id="key"
-                                placeholder="AI API Key"></div>
+                        <div id="aiBox" class="hide">
+                            <div class="row"><input id="endpoint"
+                                    placeholder="AI Base URL，例如 https://api.openai.com/v1"><input id="model"
+                                    placeholder="模型，例如 gpt-4o-mini / deepseek-chat"><input id="key"
+                                    placeholder="AI API Key"></div>
+                            <div class="prompt-manager">
+                                <label id="promptLabel" for="promptSelect">AI 提示词</label>
+                                <div class="prompt-actions"><select id="promptSelect"></select><button id="promptNew"
+                                        class="x" type="button">新建</button><button id="promptDelete" class="r"
+                                        type="button">删除</button></div>
+                                <div id="promptEditor" class="prompt-editor hide">
+                                    <div><label id="promptNameLabel" for="promptName">提示词名称</label><input id="promptName"
+                                            maxlength="48" placeholder="提示词名称"></div>
+                                    <div><label id="promptContentLabel" for="promptContent">提示词内容</label><textarea
+                                            id="promptContent" maxlength="2500" placeholder="提示词内容"></textarea></div>
+                                </div>
+                                <div id="promptHint" class="prompt-hint"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -82,6 +82,14 @@ accept_loop:
         cmp     eax,1
         je      handle_post_history
 
+        call    is_get_prompts
+        cmp     eax,1
+        je      handle_get_prompts
+
+        call    is_post_prompts
+        cmp     eax,1
+        je      handle_post_prompts
+
         call    is_post_session_open
         cmp     eax,1
         je      handle_session_open
@@ -173,6 +181,14 @@ handle_get_history:
 
 handle_post_history:
         call    write_history
+        jmp     close_client
+
+handle_get_prompts:
+        call    serve_prompts
+        jmp     close_client
+
+handle_post_prompts:
+        call    write_prompts
         jmp     close_client
 
 handle_post_settings:

@@ -23,6 +23,10 @@ get_history db 'GET /history '
 get_history_len = $ - get_history
 post_history db 'POST /history '
 post_history_len = $ - post_history
+get_prompts db 'GET /prompts '
+get_prompts_len = $ - get_prompts
+post_prompts db 'POST /prompts '
+post_prompts_len = $ - post_prompts
 post_session_open db 'POST /session/open '
 post_session_open_len = $ - post_session_open
 post_session_close db 'POST /session/close '
@@ -40,6 +44,7 @@ post_notify_sfx_len = $ - post_notify_sfx
 content_length_header db 'CONTENT-LENGTH:'
 settings_file db 'settings.json',0
 history_file db 'history.json',0
+prompts_file db 'prompts.json',0
 dns_probe_ip db '8.8.8.8',0
 startup_key db 'Software\Microsoft\Windows\CurrentVersion\Run',0
 startup_value db 'VRC Chatbox OSC',0
@@ -120,6 +125,8 @@ empty_json db '{}'
 empty_json_len = $ - empty_json
 empty_history_json db '[]'
 empty_history_json_len = $ - empty_history_json
+empty_prompts_json db '{"activeId":"","items":[]}'
+empty_prompts_json_len = $ - empty_prompts_json
 default_settings db '{"translate":true,"src":"zh-CN","dst":"en","provider":"mymemory","endpoint":"","model":"","key":"","mmEmail":"","mmKey":"","format":"both","uiLang":"auto","startup":false,"startMinimized":false,"lan":false,"port":19001,"oscPort":9000}'
 default_settings_len = $ - default_settings
 reuse_opt dd 1

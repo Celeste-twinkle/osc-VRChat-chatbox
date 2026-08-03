@@ -8,7 +8,7 @@
 
 ## 功能
 
-- 单 exe 发布，当前约 51 KB。
+- 单 exe 发布，当前约 90 KB。
 - UI 直接使用系统默认浏览器。
 - UI 文案支持自动适配中文、英文、日文、韩文，也可在“设置”里手动选择 UI 语言。
 - 程序启动后会在 Windows 通知区域创建托盘图标，右键可打开 UI、切换局域网访问、切换开机自启动和最小化自启动，或退出后台服务。
@@ -25,6 +25,8 @@
 - 默认使用 MyMemory 免费公开翻译 API。
 - 可填写 MyMemory email 提升免费额度，也可填写 MyMemory key 使用私有 TM/认证能力。
 - 可选接入 OpenAI-compatible AI 大模型 API。
+- AI 模式可使用系统默认提示词，也可保存、编辑、删除并切换最多 6 个自定义提示词模板；模板由本地服务保存在 `prompts.json`，重启或从其他设备访问同一服务后仍可使用。
+- 纯数字、纯符号、Emoji 等不含自然语言文字的输入会直接原样发送，不调用翻译 API；默认 AI 提示词也会要求无法翻译时只返回原文。
 - 页面心跳：每个页面会创建独立 session id 并定时发送心跳。
 - 后台服务不会因页面关闭或心跳停止而自动退出；可通过托盘菜单退出。
 - 如果旧服务已经在运行，再次启动 exe 会跳过启动服务流程，只打开已有页面。
@@ -84,7 +86,13 @@ AI 设置、MyMemory email、MyMemory key、翻译格式、UI 语言和自启动
 settings.json
 ```
 
-这个文件可能包含你的 API Key 或 MyMemory key。不要复制、上传、提交到 Git，或发送给任何人。
+自定义 AI 提示词模板会保存在同目录下：
+
+```text
+prompts.json
+```
+
+`settings.json` 可能包含你的 API Key 或 MyMemory key，`prompts.json` 可能包含你的自定义指令。不要复制、上传、提交到 Git，或发送给任何人。
 
 ## 使用方法
 
@@ -151,7 +159,7 @@ Release 附件只需要包含：
 vrc-chatbox-osc.exe
 ```
 
-不要把 `settings.json` 放进发布包。
+不要把 `settings.json` 或 `prompts.json` 放进发布包。
 
 ## License
 

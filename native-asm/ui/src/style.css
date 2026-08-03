@@ -187,6 +187,18 @@ label { display: block; color: var(--text2); font-size: 12px; margin: 0 0 5px; }
   padding: 10px 12px; background: var(--accent-bg); color: var(--accent-text);
   text-decoration: none; font-size: 13px; font-weight: 650;
 }
+.prompt-manager {
+  margin-bottom: 12px; padding: 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface2);
+}
+.prompt-actions { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.prompt-actions button { min-width: 0; padding: 9px 12px; font-size: 13px; white-space: nowrap; }
+.prompt-editor { display: grid; gap: 8px; margin-top: 10px; }
+.prompt-editor textarea {
+  min-height: 132px; padding: 10px; font-size: 13px; line-height: 1.5;
+  background: var(--surface); resize: vertical;
+}
+.prompt-hint { margin-top: 8px; color: var(--text2); font-size: 12px; line-height: 1.45; }
 button {
   min-width: 132px; border: 0; border-radius: 8px; padding: 12px 18px;
   background: var(--accent); color: white; font: inherit; font-weight: 650; cursor: pointer;
@@ -219,6 +231,8 @@ button.r:hover { background: var(--danger-hover); }
   .quick { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin-bottom: 10px; }
   .quick label { font-size: 11px; margin-bottom: 4px; }
   .quick select { padding: 8px 4px; font-size: 12px; min-width: 0; }
+  .prompt-actions { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .prompt-actions button { width: auto; padding-inline: 10px; }
   button { width: 100%; }
   /* History toolbar buttons share the row equally on narrow screens. */
   .hbar { display: flex; }
