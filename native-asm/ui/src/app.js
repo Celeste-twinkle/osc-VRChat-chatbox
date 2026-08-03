@@ -68,7 +68,6 @@ let timer = 0,
   typingTimer = 0,
   history = [],
   hidCounter = 0,
-  longPressTimer = 0,
   tapTimer = 0,
   pressBothTimer = 0,
   pressStart = 0,
@@ -161,6 +160,7 @@ const I18N = {
     translateSend: "翻译发送",
     clear: "清空",
     clearHistory: "清空历史",
+    deleteHistory: "删除历史项",
     clearHistoryConfirm: "确定清空全部历史记录？",
     historyCleared: "历史记录已清空。",
     enterSend: "Enter 发送，Shift + Enter 换行",
@@ -240,6 +240,7 @@ const I18N = {
     translateSend: "Translate + send",
     clear: "Clear",
     clearHistory: "Clear history",
+    deleteHistory: "Delete history item",
     clearHistoryConfirm: "Clear all history?",
     historyCleared: "History cleared.",
     enterSend: "Enter to send, Shift + Enter for newline",
@@ -322,6 +323,7 @@ const I18N = {
     translateSend: "翻訳して送信",
     clear: "クリア",
     clearHistory: "履歴をクリア",
+    deleteHistory: "履歴項目を削除",
     clearHistoryConfirm: "履歴をすべてクリアしますか？",
     historyCleared: "履歴をクリアしました。",
     enterSend: "Enterで送信、Shift + Enterで改行",
@@ -402,6 +404,7 @@ const I18N = {
     translateSend: "번역 후 전송",
     clear: "지우기",
     clearHistory: "히스토리 지우기",
+    deleteHistory: "히스토리 항목 삭제",
     clearHistoryConfirm: "히스토리를 모두 지우시겠습니까?",
     historyCleared: "히스토리를 지웠습니다.",
     enterSend: "Enter 전송, Shift + Enter 줄바꿈",
@@ -516,6 +519,7 @@ function applyLang() {
   tx(hnote, "historyTapHint");
   setLanState(qrBtn.dataset.ip || "127.0.0.1", qrBtn.dataset.fail === "1");
   showBoxes();
+  if (history.length) renderHistory();
 }
 const sid = (
   Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
@@ -565,8 +569,8 @@ function setTyping(on) {
   // the "false" close signal on every stop-typing transition.
   if (!on) {
     try {
-      navigator.sendBeacon && navigator.sendBeacon("/typing", "false");
-      return;
+      if (navigator.sendBeacon && navigator.sendBeacon("/typing", "false"))
+        return;
     } catch (e) {}
   }
   fetch("/typing", {
@@ -1096,6 +1100,7 @@ async function trAI(v) {
     : "";
 }
 async function sendText(direct) {
+  if (busy) return;
   const v = text.value.trim();
   if (!v) {
     message.textContent = L("empty");
@@ -1199,7 +1204,8 @@ lanBtn.addEventListener("click", enableLan);
 exportHistory.addEventListener("click", function () {
   if (!history.length) return;
   let data = history
-      .slice()      .reverse()
+      .slice()
+      .reverse()
       .map(
         (h) => "[" + h.time + "] " + h.text + (h.trans ? "\n" + h.trans : ""),
       )
@@ -1234,6 +1240,8 @@ clearBtn.addEventListener("click", function () {
   setTyping(false);
 });
 clearBubble.addEventListener("click", async function () {
+  if (busy) return;
+  busy = true;
   button.disabled = true;
   trButton.disabled = true;
   message.textContent = "清除中...";
@@ -1252,6 +1260,7 @@ clearBubble.addEventListener("click", async function () {
     message.className = "m e";
     status.textContent = L("badConn");
   } finally {
+    busy = false;
     button.disabled = false;
     trButton.disabled = false;
     text.focus();
@@ -1325,8 +1334,11 @@ function buildItemHTML(h) {
     '" id="hitem-' +
     h.hid +
     '">' +
-    '<span class="htext"><span class="hsrc" ' +
-    'onpointerdown="cellDown(event,' +
+    '<span class="htext"><span class="hsrc" role="button" tabindex="0" ' +
+    'onkeydown="cellKey(event,' +
+    h.hid +
+    ",'src')" +
+    '" onpointerdown="cellDown(event,' +
     h.hid +
     ",'src')" +
     '" onpointerup="cellUp(event,' +
@@ -1336,7 +1348,10 @@ function buildItemHTML(h) {
     escText +
     "</span>" +
     (h.trans
-      ? '<span class="htrans" onpointerdown="cellDown(event,' +
+      ? '<span class="htrans" role="button" tabindex="0" onkeydown="cellKey(event,' +
+        h.hid +
+        ",'trans')" +
+        '" onpointerdown="cellDown(event,' +
         h.hid +
         ",'trans')" +
         '" onpointerup="cellUp(event,' +
@@ -1350,7 +1365,11 @@ function buildItemHTML(h) {
     '<span class="htime">' +
     t +
     "</span>" +
-    '<span class="del" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" onclick="event.stopPropagation();delHistory(' +
+    '<span class="del" role="button" tabindex="0" aria-label="' +
+    esc(L("deleteHistory")) +
+    '" onkeydown="delKey(event,' +
+    h.hid +
+    ')" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" onclick="event.stopPropagation();delHistory(' +
     h.hid +
     ')">&times;</span></div>'
   );
@@ -1375,10 +1394,23 @@ function trimHistory() {
    - longpress -> send only that column's text
    - hold >1.2s-> send original + translation
    This is fully decoupled from the [翻译格式] setting. */
+function cellKey(e, hid, part) {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  e.stopPropagation();
+  const both = e.shiftKey ? null : part;
+  if (e.ctrlKey || e.metaKey) resendCell(hid, both);
+  else fillCell(hid, both);
+}
+function delKey(e, hid) {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  e.stopPropagation();
+  delHistory(hid);
+}
 function cellDown(e, hid, part) {
   e.preventDefault();
   e.stopPropagation();
-  clearTimeout(longPressTimer);
   clearTimeout(tapTimer);
   clearTimeout(pressBothTimer);
   pressHid = hid;
@@ -1399,7 +1431,6 @@ function cellDown(e, hid, part) {
 function cellUp(e, hid, part) {
   e.preventDefault();
   e.stopPropagation();
-  clearTimeout(longPressTimer);
   clearTimeout(pressBothTimer);
   if (pressEl && pressHid === hid && pressPart === part) {
     pressEl.classList.remove("pressing");
@@ -1433,7 +1464,6 @@ function cellUp(e, hid, part) {
   }
 }
 function cellCancel() {
-  clearTimeout(longPressTimer);
   clearTimeout(tapTimer);
   clearTimeout(pressBothTimer);
   if (pressEl) {
@@ -1470,10 +1500,12 @@ function cellContentBoth(h) {
   return h.text + (h.trans ? "\n" + h.trans : "");
 }
 async function resendCell(hid, part) {
+  if (busy) return;
   var i = findByHid(hid);
   if (i < 0) return;
   var h = history[i],
     out = part === null ? cellContentBoth(h) : cellContent(h, part);
+  busy = true;
   button.disabled = true;
   trButton.disabled = true;
   message.textContent = L("resending");
@@ -1492,6 +1524,7 @@ async function resendCell(hid, part) {
     message.className = "m e";
     status.textContent = L("badConn");
   } finally {
+    busy = false;
     button.disabled = false;
     trButton.disabled = false;
     text.focus();
@@ -1557,5 +1590,7 @@ document.addEventListener("click", function (e) {
 window.cellDown = cellDown;
 window.cellUp = cellUp;
 window.cellCancel = cellCancel;
+window.cellKey = cellKey;
+window.delKey = delKey;
 window.delHistory = delHistory;
 })();
