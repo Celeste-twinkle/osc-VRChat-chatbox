@@ -46,6 +46,10 @@ const byId = (id) => document.getElementById(id),
   uiLangLabel = byId("uiLangLabel"),
   histLimit = byId("histLimit"),
   histLimitLabel = byId("histLimitLabel"),
+  port = byId("port"),
+  portLabel = byId("portLabel"),
+  oscPort = byId("oscPort"),
+  oscPortLabel = byId("oscPortLabel"),
   startup = byId("startup"),
   startMinimized = byId("startMinimized"),
   clearBtn = byId("clearBtn"),
@@ -64,9 +68,24 @@ let timer = 0,
   hidCounter = 0,
   longPressTimer = 0,
   longPressFired = false,
+  busy = false,
   lanAllowed = false,
   lanIps = [],
-  historyDraft = 0;
+  historyDraft = 0,
+  serverPort = ""; // learned from heartbeat X-Port header
+function curPort() {
+  // When the page is viewed through a tunnel (a.natt.ctrla.top:25034) the
+  // location.port is the tunnel port, not the server's real port. Prefer the
+  // port reported by the server via the X-Port heartbeat header.
+  return serverPort || location.port || "19001";
+}
+function normLanUrl(v) {
+  v = (v || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v)) return v;
+  if (v.indexOf(":") < 0) v += ":" + curPort();
+  return "http://" + v;
+}
 const historyKey = "vrcChatboxHistory",
   historyLimitKey = "vrcChatboxHistoryLimit",
   lanUrlKey = "vrcChatboxLanUrl";
@@ -154,9 +173,11 @@ const I18N = {
     qrAddress: "二维码地址",
     qrSaved: "已保存",
     qrAuto: "自动检测",
-    qrCurrent: "当前访问",
+    qrCurrent: "当前页面地址",
     qrCustom: "手动输入",
     historyLimit: "历史记录上限",
+    port: "端口（重启后生效）",
+    oscPort: "OSC 端口（9000）",
     historyResendReady:
       "已填入历史发送内容，可编辑后手动发送",
     exportHistory: "导出历史",
@@ -229,9 +250,11 @@ const I18N = {
     qrAddress: "QR address",
     qrSaved: "Saved",
     qrAuto: "Auto detected",
-    qrCurrent: "Current access",
+    qrCurrent: "Current page URL",
     qrCustom: "Manual input",
     historyLimit: "History limit",
+    port: "Port (takes effect after restart)",
+    oscPort: "OSC port (9000)",
     historyResendReady:
       "History content restored. Edit if needed, then send manually.",
     exportHistory: "Export history",
@@ -301,6 +324,18 @@ const I18N = {
     sendFail: "送信に失敗しました。VRChat OSC が有効か確認してください。",
     badConn: "接続エラー",
     historyFilled: "履歴を入力欄に戻しました。編集してEnterで送信できます。",
+    qrAddress: "QRアドレス",
+    qrSaved: "保存済み",
+    qrAuto: "自動検出",
+    qrCurrent: "現在のページURL",
+    qrCustom: "手動入力",
+    historyLimit: "履歴の上限",
+    port: "ポート（再起動後に有効）",
+    oscPort: "OSCポート（9000）",
+    historyResendReady: "履歴の内容を入力欄に戻しました。必要なら編集して手動で送信してください。",
+    exportHistory: "履歴をエクスポート",
+    historyTapHint:
+      "履歴項目をタップすると原文+訳を入力欄に入れます（編集後の送信では自動翻訳しません）。長押しで再送信します。",
     resending: "再送信中...",
     resent: "VRChatへ再送信しました。",
     resentStatus: "再送信しました",
@@ -365,6 +400,19 @@ const I18N = {
     badConn: "연결 오류",
     historyFilled:
       "히스토리 메시지를 입력창에 넣었습니다. 수정 후 Enter로 전송하세요.",
+    qrAddress: "QR 주소",
+    qrSaved: "저장됨",
+    qrAuto: "자동 감지",
+    qrCurrent: "현재 페이지 URL",
+    qrCustom: "수동 입력",
+    historyLimit: "히스토리 상한",
+    port: "포트(재시작 후 적용)",
+    oscPort: "OSC 포트(9000)",
+    historyResendReady:
+      "히스토리 내용을 입력창에 넣었습니다. 필요하면 수정 후 수동으로 전송하세요.",
+    exportHistory: "히스토리 내보내기",
+    historyTapHint:
+      "히스토리 항목을 탭하면 원문+번역이 입력됩니다(편집 후 전송 시 자동 번역 안 함). 길게 누르면 재전송합니다.",
     resending: "재전송 중...",
     resent: "VRChat에 재전송했습니다.",
     resentStatus: "방금 재전송됨",
@@ -408,6 +456,8 @@ function applyLang() {
   tx(settingsClose, "close");
   tx(uiLangLabel, "uiLang");
   tx(histLimitLabel, "historyLimit");
+  tx(portLabel, "port");
+  tx(oscPortLabel, "oscPort");
   lab(startup, "startup");
   lab(startMinimized, "startMinimized");
   lab(trOn, "enableTranslate");
@@ -440,10 +490,43 @@ function applyLang() {
 const sid = (
   Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
 ).slice(0, 31);
+function isLocalHost() {
+  var h = location.hostname;
+  return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "";
+}
 function beat() {
-  fetch("/heartbeat?id=" + encodeURIComponent(sid), { method: "POST" }).catch(
-    () => {},
-  );
+  var url = "/heartbeat?id=" + encodeURIComponent(sid);
+  fetch(url, { method: "POST" })
+    .then(function (r) {
+      var p = r.headers.get("X-Port");
+      if (p && p !== serverPort) {
+        serverPort = p;
+        // Refresh the LAN address shown: when viewed through a tunnel the
+        // page port differs from the real server port.
+        if (qrBtn.dataset.ip) {
+          var on = qrBtn.dataset.fail !== "1" && qrBtn.dataset.ip !== "127.0.0.1";
+          if (on) setLanState(qrBtn.dataset.ip, false, lanIps);
+          if (qrModal.className === "modal") renderLanChoices(qrBtn.dataset.ip);
+        }
+      }
+      // Only local clients can follow the X-Port redirect: a tunnel/proxy
+      // client would break (the tunnel maps only the old port).
+      if (isLocalHost() && p && p !== (location.port || "80")) {
+        location.href =
+          location.protocol + "//" + location.hostname + ":" + p + "/";
+        return;
+      }
+      if (!busy) {
+        status.textContent = L("connected");
+        status.className = "s";
+      }
+    })
+    .catch(function () {
+      if (!busy) {
+        status.textContent = L("badConn");
+        status.className = "s e";
+      }
+    });
 }
 beat();
 setInterval(beat, 3000);
@@ -476,13 +559,6 @@ settingsClose.addEventListener("click", closeSettings);
 settingsModal.addEventListener("click", function (e) {
   if (e.target === settingsModal) closeSettings();
 });
-function normLanUrl(v) {
-  v = (v || "").trim();
-  if (!v) return "";
-  if (/^https?:\/\//i.test(v)) return v;
-  if (v.indexOf(":") < 0) v += ":19001";
-  return "http://" + v;
-}
 function addLanChoice(a, u, label) {
   u = normLanUrl(u);
   if (!u) return;
@@ -496,18 +572,18 @@ function lanChoiceList(ip) {
     localStorage.removeItem(lanUrlKey);
     saved = "";
   }
+  // "Current page URL" always comes first and is never deduped away: it is
+  // the address the user is actually viewing (may be a tunnel/proxy host).
+  if (location.origin) {
+    if (normLanUrl(saved) === location.origin) saved = "";
+    a.push({ url: location.origin, label: L("qrCurrent") });
+  }
   addLanChoice(a, saved, L("qrSaved"));
   if (ip && ip !== "127.0.0.1")
-    addLanChoice(a, "http://" + ip + ":19001", L("qrAuto"));
+    addLanChoice(a, "http://" + ip + ":" + curPort(), L("qrAuto"));
   (lanIps || []).forEach((x) =>
-    addLanChoice(a, "http://" + x + ":19001", L("qrAuto")),
+    addLanChoice(a, "http://" + x + ":" + curPort(), L("qrAuto")),
   );
-  if (
-    location.hostname &&
-    location.hostname !== "127.0.0.1" &&
-    location.hostname !== "localhost"
-  )
-    addLanChoice(a, location.origin, L("qrCurrent"));
   return a;
 }
 function escOpt(v) {
@@ -588,7 +664,7 @@ document.addEventListener("keydown", function (e) {
 function setLanState(ip, fail, ips) {
   if (ips && ips.length) lanIps = ips;
   const on = !fail && ip !== "127.0.0.1";
-  const u = on ? "http://" + ip + ":19001" : "",
+  const u = on ? "http://" + ip + ":" + curPort() : "",
     saved = localStorage.getItem(lanUrlKey) || "",
     shown = saved || u;
   lanAllowed = on;
@@ -751,12 +827,12 @@ function drawQr(c, txt) {
   let q = 4,
     sc = Math.floor(c.width / (N + q * 2)),
     ctx = c.getContext("2d");
-  let st = getComputedStyle(document.body),
-    bgCol = (st.getPropertyValue("--surface") || "#ffffff").trim(),
-    fgCol = (st.getPropertyValue("--qr-fill") || "#111827").trim();
-  ctx.fillStyle = bgCol;
+  // QR codes must stay white-background/dark-modules regardless of theme:
+  // scanners expect the standard contrast, and themed colors break on
+  // print/screenshot (a dark-theme canvas turns into unreadable white bg).
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, c.width, c.height);
-  ctx.fillStyle = fgCol;
+  ctx.fillStyle = "#111827";
   for (let y = 0; y < N; y++)
     for (let x = 0; x < N; x++)
       if (m[y][x]) ctx.fillRect((x + q) * sc, (y + q) * sc, sc, sc);
@@ -820,6 +896,8 @@ async function load() {
     startup.checked = !!j.startup;
     startMinimized.checked = !!j.startMinimized;
     lanAllowed = !!j.lan;
+    port.value = j.port || 19001;
+    oscPort.value = j.oscPort || 9000;
     syncStartup();
     preset(false);
     applyLang();
@@ -847,6 +925,8 @@ async function save() {
     startup: startup.checked,
     startMinimized: startMinimized.checked,
     lan: lanAllowed,
+    port: parseInt(port.value, 10) || 19001,
+    oscPort: parseInt(oscPort.value, 10) || 9000,
   };
   try {
     await fetch("/settings", {
@@ -902,7 +982,7 @@ provider.addEventListener("change", () => {
   showBoxes();
   save();
 });
-[endpoint, model, key, mmEmail, mmKey].forEach((x) =>
+[endpoint, model, key, mmEmail, mmKey, port, oscPort].forEach((x) =>
   x.addEventListener("change", save),
 );
 [key, endpoint, model, mmEmail, mmKey].forEach((x) =>
@@ -965,6 +1045,7 @@ async function sendText() {
     message.className = "m e";
     return;
   }
+  busy = true;
   button.disabled = true;
   message.textContent = trOn.checked ? L("translating") : L("sending");
   message.className = "m";
@@ -1036,6 +1117,7 @@ async function sendText() {
     message.className = "m e";
     status.textContent = L("badConn");
   } finally {
+    busy = false;
     button.disabled = false;
     text.focus();
   }

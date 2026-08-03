@@ -1,6 +1,11 @@
 localhost db '127.0.0.1',0
 open_action db 'open',0
-url db 'http://127.0.0.1:19001',0
+url_prefix db 'http://127.0.0.1:',0
+url rb 32
+num_tmp rb 16
+heartbeat_resp rb 128
+heartbeat_resp_len dd 0
+num_ptr dd 0
 
 post_send db 'POST /send '
 post_send_len = $ - post_send
@@ -8,6 +13,12 @@ get_settings db 'GET /settings '
 get_settings_len = $ - get_settings
 post_settings db 'POST /settings '
 post_settings_len = $ - post_settings
+post_reload_settings db 'POST /reload-settings '
+post_reload_settings_len = $ - post_reload_settings
+reload_request db 'POST /reload-settings HTTP/1.1',13,10
+               db 'Host: 127.0.0.1',13,10
+               db 'Content-Length: 0',13,10,13,10
+reload_request_len = $ - reload_request
 get_history db 'GET /history '
 get_history_len = $ - get_history
 post_history db 'POST /history '
@@ -50,7 +61,14 @@ json_translate_key db '"translate"'
 json_translate_key_len = $ - json_translate_key
 json_provider_key db '"provider"'
 json_provider_key_len = $ - json_provider_key
+json_port_key db '"port":'
+json_port_key_len = $ - json_port_key
+json_osc_port_key db '"oscPort":'
+json_osc_port_key_len = $ - json_osc_port_key
+json_running_key db '"runningPort":'
+json_running_key_len = $ - json_running_key
 tray_class db 'VRCChatboxOSCTrayWindow',0
+app_mutex db 'VRCChatboxOSCSingleInstance',0
 tray_title db 'VRC Chatbox OSC',0
 tray_tip db 'VRC Chatbox OSC',0
 tray_tip_len = $ - tray_tip
@@ -90,11 +108,19 @@ http_204 db 'HTTP/1.1 204 No Content',13,10
          db 'Content-Length: 0',13,10,13,10
 http_204_len = $ - http_204
 
+http_204_head db 'HTTP/1.1 204 No Content',13,10
+              db 'Connection: close',13,10
+http_204_head_len = $ - http_204_head
+xport_prefix db 'X-Port: ',0
+http_204_tail db 13,10
+              db 'Content-Length: 0',13,10,13,10
+http_204_tail_len = $ - http_204_tail
+
 empty_json db '{}'
 empty_json_len = $ - empty_json
 empty_history_json db '[]'
 empty_history_json_len = $ - empty_history_json
-default_settings db '{"translate":true,"src":"zh-CN","dst":"en","provider":"mymemory","endpoint":"","model":"","key":"","mmEmail":"","mmKey":"","format":"both","uiLang":"auto","startup":false,"startMinimized":false,"lan":false}'
+default_settings db '{"translate":true,"src":"zh-CN","dst":"en","provider":"mymemory","endpoint":"","model":"","key":"","mmEmail":"","mmKey":"","format":"both","uiLang":"auto","startup":false,"startMinimized":false,"lan":false,"port":19001,"oscPort":9000}'
 default_settings_len = $ - default_settings
 reuse_opt dd 1
 lan_fallback_json db '{"ip":"127.0.0.1","ips":["127.0.0.1"]}'

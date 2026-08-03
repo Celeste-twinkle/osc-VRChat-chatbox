@@ -5,6 +5,9 @@ send_osc:
         mov     ebx,[ebp+12]
         mov     edi,osc_packet
 
+        invoke  htons,[osc_port]
+        mov     word [osc_addr+2],ax
+
         mov     esi,osc_addr_text
         mov     ecx,osc_addr_text_len
         call    write_osc_string
@@ -32,6 +35,8 @@ send_typing_osc:
         push    ebp
         mov     ebp,esp
         mov     edi,osc_packet
+        invoke  htons,[osc_port]
+        mov     word [osc_addr+2],ax
         mov     esi,osc_typing_addr
         mov     ecx,osc_typing_addr_len
         call    write_osc_string

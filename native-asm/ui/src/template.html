@@ -24,8 +24,9 @@
         </header>
         <section class="c">
             <div class="lan">
-                <div><b>局域网访问地址</b><span class="lan-note">可在同一路由其他设备访问，如连接路由器wifi的手机</span></div>
-                <div class="lan-actions"><code id="lan">仅本机</code><button id="settingsBtn"
+                <div class="lan-info"><div class="lan-title"><b>局域网访问地址</b><code id="lan">仅本机</code></div><span
+                        class="lan-note">可在同一路由其他设备访问，如连接路由器wifi的手机</span></div>
+                <div class="lan-actions"><button id="settingsBtn"
                         type="button">设置</button><button id="qrBtn" class="hide" type="button">二维码</button><button
                         id="lanBtn" type="button">允许局域网连接</button></div>
             </div>
@@ -50,6 +51,10 @@
                             </select></div>
                         <div><label id="histLimitLabel">历史记录上限</label><input
                                 id="histLimit" type="number" min="1" max="200" value="100"></div>
+                        <div><label id="portLabel">端口</label><input
+                                id="port" type="number" min="1024" max="65535" value="19001"></div>
+                        <div><label id="oscPortLabel">OSC 端口</label><input
+                                id="oscPort" type="number" min="1024" max="65535" value="9000"></div>
                     </div><label class="toggle"><input id="startup" type="checkbox">开机自启动</label><label
                         class="toggle sub"><input id="startMinimized" type="checkbox">最小化自启动（开机启动时不打开浏览器）</label><label
                         class="toggle"><input id="trOn" type="checkbox">启用翻译</label><label class="toggle"><input

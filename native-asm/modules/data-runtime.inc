@@ -1,6 +1,18 @@
 server_socket dd 0
 client_socket dd 0
 osc_socket dd 0
+server_port dd 19001
+osc_port dd 9000
+port_pending dd 0
+new_port dd 0
+tmp_len dd 0
+old_last_activity dd 0
+pending_next dd 0
+bind_tries dd 100
+notify_port dd 0
+target_port dd 0
+notify_sock dd 0
+alt_socket dd 0
 app_instance dd 0
 tray_hwnd dd 0
 tray_icon dd 0
@@ -37,7 +49,7 @@ startup_cmd_len dd 0
 tmp_socket dd 0
 sockaddr_len dd 16
 accept_timeout dd 1000
-readfds dd 0,0
+readfds dd 0,0,0
 select_timeout dd 1,0
 if_ptr dd 0
 if_count dd 0
@@ -55,6 +67,16 @@ msg MSG
 pt POINT
 
 server_addr dw AF_INET
+            dw 0
+            dd 0
+            rb 8
+
+alt_addr    dw AF_INET
+            dw 0
+            dd 0
+            rb 8
+
+notify_addr dw AF_INET
             dw 0
             dd 0
             rb 8

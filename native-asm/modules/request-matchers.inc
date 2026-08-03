@@ -25,6 +25,15 @@ is_post_settings:
         movzx   eax,al
         ret
 
+is_post_reload_settings:
+        mov     esi,recv_buf
+        mov     edi,post_reload_settings
+        mov     ecx,post_reload_settings_len
+        repe    cmpsb
+        sete    al
+        movzx   eax,al
+        ret
+
 is_get_history:
         mov     esi,recv_buf
         mov     edi,get_history

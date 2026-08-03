@@ -12,6 +12,7 @@ load_settings_flags:
         cmp     eax,1
         jne     .default
         call    parse_settings_flags
+        call    init_server_port
 .done:
         ret
 .default:
@@ -23,6 +24,7 @@ use_default_settings_flags:
         mov     dword [body_ptr],default_settings
         mov     dword [settings_write_len],default_settings_len
         call    parse_settings_flags
+        call    init_server_port
         ret
 
 write_default_settings:
