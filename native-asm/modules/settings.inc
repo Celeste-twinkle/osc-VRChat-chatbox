@@ -97,6 +97,138 @@ settings_json_valid:
         xor     eax,eax
         ret
 
+prompts_json_valid:
+        push    ebx
+        push    edi
+        push    ebp
+        mov     ecx,[settings_write_len]
+        test    ecx,ecx
+        jz      .no
+        cmp     ecx,prompts_max_size
+        ja      .no
+        mov     esi,[body_ptr]
+.scan_start:
+        mov     al,[esi]
+        cmp     al,' '
+        je      .next_start
+        cmp     al,9
+        je      .next_start
+        cmp     al,13
+        je      .next_start
+        cmp     al,10
+        je      .next_start
+        cmp     al,'{'
+        jne     .no
+        jmp     .scan_end_init
+.next_start:
+        inc     esi
+        dec     ecx
+        jnz     .scan_start
+        jmp     .no
+.scan_end_init:
+        mov     ecx,[settings_write_len]
+        mov     esi,[body_ptr]
+        add     esi,ecx
+        dec     esi
+.scan_end:
+        mov     al,[esi]
+        cmp     al,' '
+        je      .prev_end
+        cmp     al,9
+        je      .prev_end
+        cmp     al,13
+        je      .prev_end
+        cmp     al,10
+        je      .prev_end
+        cmp     al,'}'
+        jne     .no
+        ; Reject truncated prompt snapshots before looking for their required
+        ; keys. The UI is the JSON producer, so a compact balance/string scan
+        ; gives useful corruption protection without embedding a full parser.
+        mov     esi,[body_ptr]
+        mov     ecx,[settings_write_len]
+        xor     ebx,ebx               ; object depth
+        xor     ebp,ebp               ; array depth
+        xor     edi,edi               ; bit 0: string, bit 1: escape
+.scan_structure:
+        mov     al,[esi]
+        test    edi,1
+        jz      .outside_string
+        cmp     al,20h
+        jb      .no
+        test    edi,2
+        jz      .string_char
+        and     edi,not 2
+        jmp     .next_structure
+.string_char:
+        cmp     al,'\'
+        jne     .string_quote
+        or      edi,2
+        jmp     .next_structure
+.string_quote:
+        cmp     al,'"'
+        jne     .next_structure
+        and     edi,not 1
+        jmp     .next_structure
+.outside_string:
+        cmp     al,'"'
+        jne     .open_object
+        or      edi,1
+        jmp     .next_structure
+.open_object:
+        cmp     al,'{'
+        jne     .close_object
+        inc     ebx
+        jmp     .next_structure
+.close_object:
+        cmp     al,'}'
+        jne     .open_array
+        dec     ebx
+        js      .no
+        jmp     .next_structure
+.open_array:
+        cmp     al,'['
+        jne     .close_array
+        inc     ebp
+        jmp     .next_structure
+.close_array:
+        cmp     al,']'
+        jne     .next_structure
+        dec     ebp
+        js      .no
+.next_structure:
+        inc     esi
+        loop    .scan_structure
+        test    edi,3
+        jnz     .no
+        test    ebx,ebx
+        jnz     .no
+        test    ebp,ebp
+        jnz     .no
+        mov     edi,json_prompts_active_key
+        mov     edx,json_prompts_active_key_len
+        call    json_has_true
+        cmp     eax,1
+        jne     .no
+        mov     edi,json_prompts_items_key
+        mov     edx,json_prompts_items_key_len
+        call    json_has_true
+        cmp     eax,1
+        jne     .no
+        mov     eax,1
+        jmp     .done
+.prev_end:
+        dec     esi
+        dec     ecx
+        jnz     .scan_end
+.no:
+        xor     eax,eax
+.done:
+        pop     ebp
+        pop     edi
+        pop     ebx
+        ret
+
 parse_settings_flags:
         mov     edi,json_startup_true
         mov     edx,json_startup_true_len

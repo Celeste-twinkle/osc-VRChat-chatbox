@@ -67,13 +67,17 @@ const byId = (id) => document.getElementById(id),
   promptLabel = byId("promptLabel"),
   promptSelect = byId("promptSelect"),
   promptNew = byId("promptNew"),
+  promptSave = byId("promptSave"),
   promptDelete = byId("promptDelete"),
   promptEditor = byId("promptEditor"),
   promptNameLabel = byId("promptNameLabel"),
   promptContentLabel = byId("promptContentLabel"),
   promptName = byId("promptName"),
   promptContent = byId("promptContent"),
-  promptHint = byId("promptHint");
+  promptHint = byId("promptHint"),
+  promptSaveStatus = byId("promptSaveStatus"),
+  aiCorrect = byId("aiCorrect"),
+  aiCorrectHint = byId("aiCorrectHint");
 let timer = 0,
   promptTimer = 0,
   typingTimer = 0,
@@ -94,7 +98,11 @@ let timer = 0,
   configuredPort = 19001,
   configuredOscPort = 9000,
   aiPrompts = [],
-  activePromptId = "";
+  activePromptId = "",
+  promptRevision = 0,
+  promptSavedRevision = 0,
+  promptSaving = false,
+  promptSaveState = "idle";
 function validPort(v, fallback) {
   const n = Number(v);
   return Number.isInteger(n) && n >= 1024 && n <= 65535 ? n : fallback;
@@ -119,7 +127,9 @@ const SYSTEM_PROMPT_ID = "",
   PROMPT_LIMIT = 6,
   PROMPT_CONTENT_LIMIT = 2500,
   DEFAULT_AI_PROMPT =
-    "You are a translation engine. Translate the user text from {source} to {target}. Return only the translated text, with no quotes, labels, or commentary. If the input contains no translatable natural-language text or cannot be translated, return the original text unchanged.";
+    "You are a translation engine. Translate the user text from {source} to {target}. Return only the translated text, with no quotes, labels, or commentary. If the input contains no translatable natural-language text or cannot be translated, return the original text unchanged.",
+  AI_CORRECTION_CONTRACT =
+    'The user enabled conservative source correction. Before translating, correct only unambiguous spelling, spacing, punctuation, or grammar errors. Preserve meaning, tone, names, slang, emoticons, and line breaks; do not rewrite for style. The following response format overrides earlier output-format instructions: return exactly one JSON object with string fields "corrected" and "translation", with no Markdown or commentary. "corrected" must contain the corrected source text, or the original text unchanged when no correction is needed. "translation" must contain only its translation. If the input cannot be translated, put the original text unchanged in both fields.';
 let translatableLetter;
 try {
   translatableLetter = new RegExp("\\p{L}", "u");
@@ -171,13 +181,66 @@ function renderPromptManager() {
   promptHint.textContent =
     (p ? L("promptHintCustom") : L("promptHintDefault")) +
     (aiPrompts.length >= PROMPT_LIMIT ? " " + L("promptLimit") : "");
+  renderPromptSaveState();
 }
-function resolvedPrompt() {
+function renderPromptSaveState() {
+  const keys = {
+    saved: "promptSaved",
+    dirty: "promptDirty",
+    saving: "promptSaving",
+    error: "promptSaveFailed",
+    "load-error": "promptLoadFailed",
+  };
+  promptSaveStatus.textContent = keys[promptSaveState]
+    ? L(keys[promptSaveState])
+    : "";
+  promptSaveStatus.dataset.state = promptSaveState;
+  promptSave.disabled =
+    promptSaving ||
+    (promptRevision === promptSavedRevision && promptSaveState !== "error");
+}
+function markPromptsDirty() {
+  promptRevision++;
+  promptSaveState = "dirty";
+  renderPromptSaveState();
+}
+function resolvedPrompt(withCorrection) {
   const p = activePrompt(),
     template = p && p.content.trim() ? p.content : DEFAULT_AI_PROMPT;
-  return template
+  let result = template
     .replace(/\{source\}/g, src.value)
     .replace(/\{target\}/g, dst.value);
+  if (withCorrection) result += "\n\n" + AI_CORRECTION_CONTRACT;
+  return result;
+}
+function parseCorrectionResult(content, original) {
+  const raw = String(content || "").trim();
+  if (!raw) return { corrected: original, translated: "" };
+  let candidate = raw;
+  if (candidate.startsWith("```")) {
+    candidate = candidate
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "");
+  }
+  const start = candidate.indexOf("{"),
+    end = candidate.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      const parsed = JSON.parse(candidate.slice(start, end + 1)),
+        corrected =
+          typeof parsed.corrected === "string" && parsed.corrected.trim()
+            ? parsed.corrected.trim()
+            : original,
+        translated =
+          typeof parsed.translation === "string"
+            ? parsed.translation.trim()
+            : "";
+      if (translated) return { corrected: corrected, translated: translated };
+    } catch (e) {}
+  }
+  // Some OpenAI-compatible providers ignore the JSON contract. Their plain
+  // response is still a valid translation, so correction degrades safely.
+  return { corrected: original, translated: raw };
 }
 function getHistoryLimit() {
   let n = parseInt(
@@ -228,9 +291,13 @@ const I18N = {
     aiEndpoint: "AI Base URL，例如 https://api.openai.com/v1",
     aiModel: "模型，例如 gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiCorrect: "翻译前纠正原文",
+    aiCorrectHint:
+      "仅纠正明确的错别字、拼写和语法，保留原意、语气、专名与俚语；模型不支持结构化结果时自动回退。",
     aiPrompt: "AI 提示词",
     systemPrompt: "系统默认提示词",
     newPrompt: "新建",
+    savePrompt: "保存",
     deletePrompt: "删除",
     promptName: "提示词名称",
     promptContent: "提示词内容",
@@ -243,6 +310,11 @@ const I18N = {
     promptUntitled: "未命名提示词",
     promptLimit: "最多可保存 6 个提示词。",
     promptDeleteConfirm: "删除当前提示词？",
+    promptSaved: "已保存",
+    promptDirty: "有未保存更改",
+    promptSaving: "保存中...",
+    promptSaveFailed: "保存失败，请重试",
+    promptLoadFailed: "读取失败，请刷新页面重试",
     format: "翻译格式",
     fmtBoth: "原文 + 译文",
     fmtTrans: "仅译文",
@@ -271,6 +343,7 @@ const I18N = {
     translating: "翻译中...",
     sending: "发送中...",
     sentTrans: "已翻译并发送到 VRChat。",
+    sentCorrected: "已纠正原文、翻译并发送到 VRChat。",
     sent: "已发送到 VRChat。",
     sentStatus: "刚刚发送成功",
     missingAI: "请先填写 AI endpoint、model 和 API Key。",
@@ -323,9 +396,13 @@ const I18N = {
     aiEndpoint: "AI Base URL, e.g. https://api.openai.com/v1",
     aiModel: "Model, e.g. gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiCorrect: "Correct source before translating",
+    aiCorrectHint:
+      "Fix only clear spelling and grammar errors while preserving meaning, tone, names, and slang. Falls back safely if structured output is unsupported.",
     aiPrompt: "AI prompt",
     systemPrompt: "System default prompt",
     newPrompt: "New",
+    savePrompt: "Save",
     deletePrompt: "Delete",
     promptName: "Prompt name",
     promptContent: "Prompt content",
@@ -338,6 +415,11 @@ const I18N = {
     promptUntitled: "Untitled prompt",
     promptLimit: "You can save up to 6 prompts.",
     promptDeleteConfirm: "Delete the current prompt?",
+    promptSaved: "Saved",
+    promptDirty: "Unsaved changes",
+    promptSaving: "Saving...",
+    promptSaveFailed: "Save failed. Try again.",
+    promptLoadFailed: "Load failed. Refresh to try again.",
     format: "Send format",
     fmtBoth: "Original + translation",
     fmtTrans: "Translation only",
@@ -366,6 +448,7 @@ const I18N = {
     translating: "Translating...",
     sending: "Sending...",
     sentTrans: "Translated and sent to VRChat.",
+    sentCorrected: "Corrected, translated, and sent to VRChat.",
     sent: "Sent to VRChat.",
     sentStatus: "Sent just now",
     missingAI: "Fill in AI endpoint, model, and API key first.",
@@ -421,9 +504,13 @@ const I18N = {
     aiEndpoint: "AI Base URL 例: https://api.openai.com/v1",
     aiModel: "モデル 例: gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiCorrect: "翻訳前に原文を修正",
+    aiCorrectHint:
+      "明確な誤字、綴り、文法だけを修正し、意味、口調、固有名詞、スラングを保ちます。構造化結果に未対応の場合は自動的に戻します。",
     aiPrompt: "AIプロンプト",
     systemPrompt: "システム既定のプロンプト",
     newPrompt: "新規",
+    savePrompt: "保存",
     deletePrompt: "削除",
     promptName: "プロンプト名",
     promptContent: "プロンプト内容",
@@ -436,6 +523,11 @@ const I18N = {
     promptUntitled: "無題のプロンプト",
     promptLimit: "保存できるプロンプトは6件までです。",
     promptDeleteConfirm: "現在のプロンプトを削除しますか？",
+    promptSaved: "保存済み",
+    promptDirty: "未保存の変更",
+    promptSaving: "保存中...",
+    promptSaveFailed: "保存に失敗しました。再試行してください。",
+    promptLoadFailed: "読み込みに失敗しました。更新して再試行してください。",
     format: "送信形式",
     fmtBoth: "原文 + 翻訳",
     fmtTrans: "翻訳のみ",
@@ -464,6 +556,7 @@ const I18N = {
     translating: "翻訳中...",
     sending: "送信中...",
     sentTrans: "翻訳してVRChatへ送信しました。",
+    sentCorrected: "原文を修正、翻訳してVRChatへ送信しました。",
     sent: "VRChatへ送信しました。",
     sentStatus: "送信しました",
     missingAI: "AI endpoint、model、API Key を先に入力してください。",
@@ -517,9 +610,13 @@ const I18N = {
     aiEndpoint: "AI Base URL 예: https://api.openai.com/v1",
     aiModel: "모델 예: gpt-4o-mini / deepseek-chat",
     aiKey: "AI API Key",
+    aiCorrect: "번역 전 원문 교정",
+    aiCorrectHint:
+      "명확한 오타, 철자, 문법만 교정하고 의미, 말투, 고유명사, 속어는 유지합니다. 구조화 결과를 지원하지 않으면 자동으로 기존 방식으로 전환합니다.",
     aiPrompt: "AI 프롬프트",
     systemPrompt: "시스템 기본 프롬프트",
     newPrompt: "새로 만들기",
+    savePrompt: "저장",
     deletePrompt: "삭제",
     promptName: "프롬프트 이름",
     promptContent: "프롬프트 내용",
@@ -532,6 +629,11 @@ const I18N = {
     promptUntitled: "이름 없는 프롬프트",
     promptLimit: "프롬프트는 최대 6개까지 저장할 수 있습니다.",
     promptDeleteConfirm: "현재 프롬프트를 삭제할까요?",
+    promptSaved: "저장됨",
+    promptDirty: "저장되지 않은 변경",
+    promptSaving: "저장 중...",
+    promptSaveFailed: "저장 실패. 다시 시도하세요.",
+    promptLoadFailed: "불러오기 실패. 새로 고침 후 다시 시도하세요.",
     format: "전송 형식",
     fmtBoth: "원문 + 번역",
     fmtTrans: "번역만",
@@ -560,6 +662,7 @@ const I18N = {
     translating: "번역 중...",
     sending: "전송 중...",
     sentTrans: "번역 후 VRChat에 전송했습니다.",
+    sentCorrected: "원문을 교정하고 번역해 VRChat에 전송했습니다.",
     sent: "VRChat에 전송했습니다.",
     sentStatus: "방금 전송됨",
     missingAI: "AI endpoint, model, API Key를 먼저 입력하세요.",
@@ -640,12 +743,20 @@ function applyLang() {
   tx(document.querySelector(".warn"), "warn");
   mmEmail.placeholder = L("mmEmail");
   mmKey.placeholder = L("mmKey");
+  mmEmail.setAttribute("aria-label", L("mmEmail"));
+  mmKey.setAttribute("aria-label", L("mmKey"));
   tx(document.querySelector(".linkbtn"), "mmKeyLink");
   endpoint.placeholder = L("aiEndpoint");
   model.placeholder = L("aiModel");
   key.placeholder = L("aiKey");
+  endpoint.setAttribute("aria-label", L("aiEndpoint"));
+  model.setAttribute("aria-label", L("aiModel"));
+  key.setAttribute("aria-label", L("aiKey"));
+  lab(aiCorrect, "aiCorrect");
+  tx(aiCorrectHint, "aiCorrectHint");
   tx(promptLabel, "aiPrompt");
   tx(promptNew, "newPrompt");
+  tx(promptSave, "savePrompt");
   tx(promptDelete, "deletePrompt");
   tx(promptNameLabel, "promptName");
   tx(promptContentLabel, "promptContent");
@@ -1055,6 +1166,7 @@ function showBoxes() {
         ? L("phTrans")
         : L("phBoth")
     : L("phDirect");
+  text.setAttribute("aria-label", text.placeholder);
 }
 function preset(force) {
   const ps = {
@@ -1076,9 +1188,10 @@ function syncStartup() {
 async function loadPrompts() {
   try {
     const r = await fetch("/prompts"),
-      j = await r.json(),
-      raw = Array.isArray(j.items) ? j.items : [],
+      j = r.ok ? await r.json() : null,
+      raw = j && Array.isArray(j.items) ? j.items : [],
       seen = {};
+    if (!j) throw Error();
     aiPrompts = raw
       .slice(0, PROMPT_LIMIT)
       .map(cleanPrompt)
@@ -1092,26 +1205,60 @@ async function loadPrompts() {
       aiPrompts.some((p) => p.id === j.activeId)
         ? j.activeId
         : SYSTEM_PROMPT_ID;
+    promptRevision = 0;
+    promptSavedRevision = 0;
+    promptSaveState = "saved";
   } catch (e) {
     aiPrompts = [];
     activePromptId = SYSTEM_PROMPT_ID;
+    promptRevision = 0;
+    promptSavedRevision = 0;
+    promptSaveState = "load-error";
   }
   renderPromptManager();
 }
 async function savePrompts() {
   clearTimeout(promptTimer);
+  if (promptSaving) return false;
+  if (
+    promptRevision === promptSavedRevision &&
+    promptSaveState !== "error"
+  ) {
+    promptSaveState = "saved";
+    renderPromptSaveState();
+    return true;
+  }
+  const revision = promptRevision;
   const body = JSON.stringify({
     activeId: activePromptId,
     items: aiPrompts.slice(0, PROMPT_LIMIT),
   });
+  let saved = false;
+  promptSaving = true;
+  promptSaveState = "saving";
+  renderPromptSaveState();
   try {
     const r = await fetch("/prompts", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json;charset=utf-8" },
       body: body,
     });
     if (!r.ok) throw Error();
-  } catch (e) {}
+    promptSavedRevision = revision;
+    saved = true;
+  } catch (e) {
+    promptSaveState = "error";
+  } finally {
+    promptSaving = false;
+    if (saved)
+      promptSaveState =
+        promptRevision === promptSavedRevision ? "saved" : "dirty";
+    renderPromptSaveState();
+    // Edits made while a request was in flight need their own serialized
+    // write. This also prevents an older response from overwriting newer UI.
+    if (promptRevision > revision) queuePromptSave();
+  }
+  return saved;
 }
 function queuePromptSave() {
   clearTimeout(promptTimer);
@@ -1128,6 +1275,7 @@ async function load() {
     endpoint.value = j.endpoint || "";
     model.value = j.model || "";
     key.value = j.key || "";
+    aiCorrect.checked = !!j.aiCorrect;
     mmEmail.value = j.mmEmail || "";
     mmKey.value = j.mmKey || "";
     format.value = j.format || format.value;
@@ -1165,6 +1313,7 @@ async function save() {
     endpoint: endpoint.value,
     model: model.value,
     key: key.value,
+    aiCorrect: aiCorrect.checked,
     mmEmail: mmEmail.value,
     mmKey: mmKey.value,
     format: format.value,
@@ -1234,6 +1383,7 @@ provider.addEventListener("change", () => {
   showBoxes();
   save();
 });
+aiCorrect.addEventListener("change", save);
 [endpoint, model, key, mmEmail, mmKey, port, oscPort].forEach((x) =>
   x.addEventListener("change", save),
 );
@@ -1246,6 +1396,7 @@ provider.addEventListener("change", () => {
 promptSelect.addEventListener("change", function () {
   activePromptId = promptSelect.value;
   renderPromptManager();
+  markPromptsDirty();
   savePrompts();
 });
 promptNew.addEventListener("click", function () {
@@ -1261,16 +1412,19 @@ promptNew.addEventListener("click", function () {
   aiPrompts.push(p);
   activePromptId = p.id;
   renderPromptManager();
+  markPromptsDirty();
   promptName.focus();
   promptName.select();
   savePrompts();
 });
+promptSave.addEventListener("click", savePrompts);
 promptDelete.addEventListener("click", function () {
   const p = activePrompt();
   if (!p || !confirm(L("promptDeleteConfirm"))) return;
   aiPrompts = aiPrompts.filter((item) => item.id !== p.id);
   activePromptId = SYSTEM_PROMPT_ID;
   renderPromptManager();
+  markPromptsDirty();
   savePrompts();
 });
 promptName.addEventListener("input", function () {
@@ -1279,16 +1433,18 @@ promptName.addEventListener("input", function () {
   p.name = promptName.value.slice(0, 48);
   const option = Array.from(promptSelect.options).find((o) => o.value === p.id);
   if (option) option.textContent = p.name || L("promptUntitled");
+  markPromptsDirty();
   queuePromptSave();
 });
 promptContent.addEventListener("input", function () {
   const p = activePrompt();
   if (!p) return;
   p.content = promptContent.value.slice(0, PROMPT_CONTENT_LIMIT);
+  markPromptsDirty();
   queuePromptSave();
 });
-async function tr(v) {
-  if (provider.value !== "mymemory") return trAI(v);
+async function tr(v, withCorrection) {
+  if (provider.value !== "mymemory") return trAI(v, withCorrection);
   let u =
     "https://api.mymemory.translated.net/get?q=" +
     encodeURIComponent(v) +
@@ -1298,38 +1454,49 @@ async function tr(v) {
   if (mmKey.value) u += "&key=" + encodeURIComponent(mmKey.value);
   let r = await fetch(u);
   let j = await r.json();
-  return j.responseData && j.responseData.translatedText
-    ? j.responseData.translatedText
-    : "";
+  return {
+    corrected: v,
+    translated:
+      j.responseData && j.responseData.translatedText
+        ? j.responseData.translatedText
+        : "",
+  };
 }
 function chatUrl() {
   let u = endpoint.value.trim().replace(/\/+$/, "");
   return u.endsWith("/chat/completions") ? u : u + "/chat/completions";
 }
-async function trAI(v) {
+async function trAI(v, withCorrection) {
   if (!endpoint.value || !model.value || !key.value)
     throw Error("missing ai settings");
+  const payload = {
+    model: model.value,
+    messages: [
+      {
+        role: "system",
+        content: resolvedPrompt(withCorrection),
+      },
+      { role: "user", content: v },
+    ],
+  };
+  if (provider.value === "deepseek")
+    payload.thinking = { type: "disabled" };
   let r = await fetch(chatUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: "Bearer " + key.value,
     },
-    body: JSON.stringify({
-      model: model.value,
-      messages: [
-        {
-          role: "system",
-          content: resolvedPrompt(),
-        },
-        { role: "user", content: v },
-      ],
-    }),
+    body: JSON.stringify(payload),
   });
   let j = await r.json();
-  return j.choices && j.choices[0] && j.choices[0].message
-    ? j.choices[0].message.content
-    : "";
+  const content =
+    j.choices && j.choices[0] && j.choices[0].message
+      ? j.choices[0].message.content
+      : "";
+  return withCorrection
+    ? parseCorrectionResult(content, v)
+    : { corrected: v, translated: String(content || "").trim() };
 }
 async function sendText(direct) {
   if (busy) return;
@@ -1352,7 +1519,9 @@ async function sendText(direct) {
   try {
     await save();
     let tv = "",
-      out = "";
+      out = "",
+      sourceText = v,
+      correctionApplied = false;
     if (
       direct ||
       !trOn.checked ||
@@ -1363,10 +1532,15 @@ async function sendText(direct) {
       // translation-off, orig-only formats, and inputs with no letters.
       out = v;
     } else {
-      tv = await tr(v);
+      const withCorrection =
+          provider.value !== "mymemory" && aiCorrect.checked,
+        result = await tr(v, withCorrection);
+      tv = result.translated;
       if (!tv) throw Error("empty trans");
+      sourceText = result.corrected || v;
+      correctionApplied = withCorrection && sourceText !== v;
       if (format.value === "trans") out = tv;
-      else out = v + "\n" + tv;
+      else out = sourceText + "\n" + tv;
     }
     const r = await fetch("/send", {
       method: "POST",
@@ -1376,7 +1550,7 @@ async function sendText(direct) {
     if (!r.ok) throw Error();
     var h = {
       hid: ++hidCounter,
-      text: v,
+      text: sourceText,
       trans: tv,
       src: src.value,
       dst: dst.value,
@@ -1393,7 +1567,11 @@ async function sendText(direct) {
     clearInterval(typingTimer);
     typingTimer = 0;
     setTyping(false);
-    message.textContent = tv ? L("sentTrans") : L("sent");
+    message.textContent = correctionApplied
+      ? L("sentCorrected")
+      : tv
+        ? L("sentTrans")
+        : L("sent");
     status.textContent = L("sentStatus");
   } catch (e) {
     message.textContent =
@@ -1787,7 +1965,7 @@ loadPrompts();
 load();
 refreshLan();
 
-/* Theme toggle — vanilla implementation (no framework needed). */
+/* Theme toggle - vanilla implementation (no framework needed). */
 const THEME_KEY = "vrcChatboxTheme";
 function currentTheme() {
   let t = "";

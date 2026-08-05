@@ -33,8 +33,9 @@
             <div id="qrModal" class="modal hide">
                 <div class="panel qrpanel">
                     <div class="ph"><b>局域网二维码</b><button id="qrClose" class="x" type="button">关闭</button></div>
-                    <div class="qrctrl"><label id="qrHostLabel">二维码地址</label><select id="qrChoice"></select><input
-                            id="qrHost" placeholder="192.168.1.100:19001"></div><canvas id="qrCanvas" width="264"
+                    <div class="qrctrl"><label id="qrHostLabel">二维码地址</label><select id="qrChoice"
+                            aria-labelledby="qrHostLabel"></select><input id="qrHost" aria-labelledby="qrHostLabel"
+                            placeholder="192.168.1.100:19001"></div><canvas id="qrCanvas" width="264"
                         height="264"></canvas><a id="qrLink" class="qrurl" target="_blank" href="#"></a>
                 </div>
             </div>
@@ -42,18 +43,18 @@
                 <div class="panel">
                     <div class="ph"><b>设置</b><button id="settingsClose" class="x" type="button">关闭</button></div>
                     <div class="row2">
-                        <div><label id="uiLangLabel">UI 语言</label><select id="uiLang">
+                        <div><label id="uiLangLabel" for="uiLang">UI 语言</label><select id="uiLang">
                                 <option value="auto">Auto</option>
                                 <option value="zh">中文</option>
                                 <option value="en">English</option>
                                 <option value="ja">日本語</option>
                                 <option value="ko">한국어</option>
                             </select></div>
-                        <div><label id="histLimitLabel">历史记录上限</label><input
+                        <div><label id="histLimitLabel" for="histLimit">历史记录上限</label><input
                                 id="histLimit" type="number" min="1" max="200" value="100"></div>
-                        <div><label id="portLabel">端口</label><input
+                        <div><label id="portLabel" for="port">端口</label><input
                                 id="port" type="number" min="1024" max="65535" value="19001"></div>
-                        <div><label id="oscPortLabel">OSC 端口</label><input
+                        <div><label id="oscPortLabel" for="oscPort">OSC 端口</label><input
                                 id="oscPort" type="number" min="1024" max="65535" value="9000"></div>
                     </div><label class="toggle"><input id="startup" type="checkbox">开机自启动</label><label
                         class="toggle sub"><input id="startMinimized" type="checkbox">最小化自启动（开机启动时不打开浏览器）</label><label
@@ -61,15 +62,15 @@
                             id="notifySfx" type="checkbox" checked>提示音</label>
                     <div id="trBox" class="hide">
                         <div class="row2">
-                            <div><label id="settingsSrcLabel">源语言</label><select
+                            <div><label id="settingsSrcLabel" for="settingsSrc">源语言</label><select
                                     id="settingsSrc"></select></div>
-                            <div><label id="settingsDstLabel">目标语言</label><select
+                            <div><label id="settingsDstLabel" for="settingsDst">目标语言</label><select
                                     id="settingsDst"></select></div>
                         </div>
                         <div class="row2">
-                            <div><label id="settingsFmtLabel">翻译格式</label><select
+                            <div><label id="settingsFmtLabel" for="settingsFmt">翻译格式</label><select
                                     id="settingsFmt"></select></div>
-                            <div><label id="providerLabel">翻译服务</label><select id="provider">
+                            <div><label id="providerLabel" for="provider">翻译服务</label><select id="provider">
                                     <option value="mymemory">MyMemory 免费公开 API</option>
                                     <option value="openai">ChatGPT / OpenAI</option>
                                     <option value="deepseek">DeepSeek</option>
@@ -79,18 +80,22 @@
                         </div>
                         <div class="warn">Key 会保存到本机 settings.json。不要把这个文件复制或发送给任何人。若 MyMemory 翻译失败或提示额度不足，请尝试填写
                             email，或自行获取 key 后使用。</div>
-                        <div id="mmBox" class="row"><input id="mmEmail" placeholder="MyMemory email，可提升免费额度"><input
-                                id="mmKey" placeholder="MyMemory key，可选"><a class="linkbtn" target="_blank"
+                        <div id="mmBox" class="row"><input id="mmEmail" aria-label="MyMemory email，可提升免费额度"
+                                placeholder="MyMemory email，可提升免费额度"><input id="mmKey" aria-label="MyMemory key，可选"
+                                placeholder="MyMemory key，可选"><a class="linkbtn" target="_blank"
                                 href="https://mymemory.translated.net/doc/keygen.php">获取 MyMemory key</a></div>
                         <div id="aiBox" class="hide">
-                            <div class="row"><input id="endpoint"
+                            <div class="row"><input id="endpoint" aria-label="AI Base URL"
                                     placeholder="AI Base URL，例如 https://api.openai.com/v1"><input id="model"
-                                    placeholder="模型，例如 gpt-4o-mini / deepseek-chat"><input id="key"
-                                    placeholder="AI API Key"></div>
+                                    aria-label="AI 模型" placeholder="模型，例如 gpt-4o-mini / deepseek-chat"><input id="key"
+                                    aria-label="AI API Key" placeholder="AI API Key"></div>
+                            <label class="toggle ai-correct"><input id="aiCorrect" type="checkbox">翻译前纠正原文</label>
+                            <div id="aiCorrectHint" class="option-note">仅纠正明确的错别字、拼写和语法，保留原意、语气、专名与俚语。</div>
                             <div class="prompt-manager">
                                 <label id="promptLabel" for="promptSelect">AI 提示词</label>
                                 <div class="prompt-actions"><select id="promptSelect"></select><button id="promptNew"
-                                        class="x" type="button">新建</button><button id="promptDelete" class="r"
+                                        class="x" type="button">新建</button><button id="promptSave"
+                                        type="button">保存</button><button id="promptDelete" class="r"
                                         type="button">删除</button></div>
                                 <div id="promptEditor" class="prompt-editor hide">
                                     <div><label id="promptNameLabel" for="promptName">提示词名称</label><input id="promptName"
@@ -98,14 +103,15 @@
                                     <div><label id="promptContentLabel" for="promptContent">提示词内容</label><textarea
                                             id="promptContent" maxlength="2500" placeholder="提示词内容"></textarea></div>
                                 </div>
-                                <div id="promptHint" class="prompt-hint"></div>
+                                <div class="prompt-meta"><div id="promptHint" class="prompt-hint"></div><div
+                                        id="promptSaveStatus" class="prompt-status" aria-live="polite"></div></div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             <div id="quickTr" class="quick hide">
-                <div><label id="srcLabel">源语言</label><select id="src">
+                <div><label id="srcLabel" for="src">源语言</label><select id="src">
                         <option value="zh-CN">简体中文</option>
                         <option value="en">English</option>
                         <option value="ja">日本語</option>
@@ -114,7 +120,7 @@
                         <option value="de">Deutsch</option>
                         <option value="es">Español</option>
                     </select></div>
-                <div><label id="dstLabel">目标语言</label><select id="dst">
+                <div><label id="dstLabel" for="dst">目标语言</label><select id="dst">
                         <option value="en">English</option>
                         <option value="zh-CN">简体中文</option>
                         <option value="ja">日本語</option>
@@ -123,13 +129,14 @@
                         <option value="de">Deutsch</option>
                         <option value="es">Español</option>
                     </select></div>
-                <div><label id="fmtLabel">翻译格式</label><select id="fmt">
+                <div><label id="fmtLabel" for="fmt">翻译格式</label><select id="fmt">
                         <option value="both">原文 + 译文</option>
                         <option value="trans">仅译文</option>
                         <option value="orig">仅原文（不翻译）</option>
                     </select></div>
             </div>
-            <div class="wrap"><textarea id="text" autofocus placeholder="输入要直接发送到 VRChat Chatbox 的文字。"></textarea><span
+            <div class="wrap"><textarea id="text" autofocus aria-label="输入要发送到 VRChat Chatbox 的文字"
+                    placeholder="输入要直接发送到 VRChat Chatbox 的文字。"></textarea><span
                     id="cnt" class="cnt">0/144</span></div>
             <div class="a">
                 <div class="h" id="hint">Enter 发送，Shift + Enter 换行</div>

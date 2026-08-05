@@ -149,28 +149,34 @@ serve_prompts:
         cmp     eax,-1
         je      .empty
         mov     [settings_handle],eax
-        invoke  ReadFile,[settings_handle],recv_buf,recv_buf_size-1,bytes_done,0
+        invoke  ReadFile,[settings_handle],recv_buf,prompts_max_size+1,bytes_done,0
         invoke  CloseHandle,[settings_handle]
-        invoke  send,[client_socket],http_200_json,http_200_json_len,0
         mov     eax,[bytes_done]
-        test    eax,eax
-        jz      .empty_body
+        mov     [settings_write_len],eax
+        mov     dword [body_ptr],recv_buf
+        call    prompts_json_valid
+        cmp     eax,1
+        jne     .empty
+        invoke  send,[client_socket],http_200_json,http_200_json_len,0
         invoke  send,[client_socket],recv_buf,[bytes_done],0
         ret
 .empty:
         invoke  send,[client_socket],http_200_json,http_200_json_len,0
-.empty_body:
         invoke  send,[client_socket],empty_prompts_json,empty_prompts_json_len,0
         ret
 
 write_prompts:
         call    find_body
         test    eax,eax
-        jz      send_no_content
+        jz      .bad_request
         mov     esi,eax
         mov     [body_ptr],esi
         call    parse_content_length
         mov     [content_len],eax
+        test    eax,eax
+        jz      .bad_request
+        cmp     eax,prompts_max_size
+        ja      .too_large
         mov     ecx,[recv_len]
         sub     ecx,[body_ptr]
         add     ecx,recv_buf
@@ -191,23 +197,52 @@ write_prompts:
         add     [body_have],eax
         jmp     .read_more
 .len_ready:
+        mov     eax,[body_have]
+        cmp     eax,[content_len]
+        jb      .bad_request
         mov     ecx,[content_len]
-        cmp     ecx,[body_have]
-        jle     .have_ok
-        mov     ecx,[body_have]
-.have_ok:
-        cmp     ecx,recv_buf_size-1
-        jle     .size_ok
-        mov     ecx,recv_buf_size-1
-.size_ok:
         mov     [settings_write_len],ecx
-        invoke  CreateFile,prompts_file,40000000h,0,0,2,80h,0
+        call    prompts_json_valid
+        cmp     eax,1
+        jne     .bad_request
+        ; Write a validated snapshot beside the destination, flush it, then
+        ; atomically replace prompts.json. A failed write never truncates the
+        ; last known-good prompt collection.
+        invoke  CreateFile,prompts_temp_file,40000000h,0,0,2,80h,0
         cmp     eax,-1
-        je      send_no_content
+        je      .write_error
         mov     [settings_handle],eax
         invoke  WriteFile,[settings_handle],[body_ptr],[settings_write_len],bytes_done,0
+        mov     ebx,eax
+        test    ebx,ebx
+        jz      .mark_write_failed
+        mov     eax,[bytes_done]
+        cmp     eax,[settings_write_len]
+        jne     .mark_write_failed
+        invoke  FlushFileBuffers,[settings_handle]
+        mov     ebx,eax
+        jmp     .close_write
+.mark_write_failed:
+        xor     ebx,ebx
+.close_write:
         invoke  CloseHandle,[settings_handle]
-        jmp     send_no_content
+        test    ebx,ebx
+        jz      .write_error
+        invoke  MoveFileEx,prompts_temp_file,prompts_file,MOVEFILE_REPLACE_EXISTING+MOVEFILE_WRITE_THROUGH
+        test    eax,eax
+        jz      .write_error
+        invoke  send,[client_socket],http_204,http_204_len,0
+        ret
+.bad_request:
+        invoke  send,[client_socket],http_400,http_400_len,0
+        ret
+.too_large:
+        invoke  send,[client_socket],http_413,http_413_len,0
+        ret
+.write_error:
+        invoke  DeleteFile,prompts_temp_file
+        invoke  send,[client_socket],http_500,http_500_len,0
+        ret
 
 serve_settings:
         invoke  CreateFile,settings_file,80000000h,1,0,3,80h,0

@@ -1,4 +1,5 @@
 localhost db '127.0.0.1',0
+prompts_max_size = 32768
 open_action db 'open',0
 url_prefix db 'http://127.0.0.1:',0
 url rb 32
@@ -45,6 +46,7 @@ content_length_header db 'CONTENT-LENGTH:'
 settings_file db 'settings.json',0
 history_file db 'history.json',0
 prompts_file db 'prompts.json',0
+prompts_temp_file db 'prompts.json.tmp',0
 dns_probe_ip db '8.8.8.8',0
 startup_key db 'Software\Microsoft\Windows\CurrentVersion\Run',0
 startup_value db 'VRC Chatbox OSC',0
@@ -66,6 +68,10 @@ json_translate_key db '"translate"'
 json_translate_key_len = $ - json_translate_key
 json_provider_key db '"provider"'
 json_provider_key_len = $ - json_provider_key
+json_prompts_active_key db '"activeId":'
+json_prompts_active_key_len = $ - json_prompts_active_key
+json_prompts_items_key db '"items":'
+json_prompts_items_key_len = $ - json_prompts_items_key
 json_port_key db '"port":'
 json_port_key_len = $ - json_port_key
 json_osc_port_key db '"oscPort":'
@@ -113,6 +119,21 @@ http_204 db 'HTTP/1.1 204 No Content',13,10
          db 'Content-Length: 0',13,10,13,10
 http_204_len = $ - http_204
 
+http_400 db 'HTTP/1.1 400 Bad Request',13,10
+         db 'Connection: close',13,10
+         db 'Content-Length: 0',13,10,13,10
+http_400_len = $ - http_400
+
+http_413 db 'HTTP/1.1 413 Payload Too Large',13,10
+         db 'Connection: close',13,10
+         db 'Content-Length: 0',13,10,13,10
+http_413_len = $ - http_413
+
+http_500 db 'HTTP/1.1 500 Internal Server Error',13,10
+         db 'Connection: close',13,10
+         db 'Content-Length: 0',13,10,13,10
+http_500_len = $ - http_500
+
 http_204_head db 'HTTP/1.1 204 No Content',13,10
               db 'Connection: close',13,10
 http_204_head_len = $ - http_204_head
@@ -127,7 +148,7 @@ empty_history_json db '[]'
 empty_history_json_len = $ - empty_history_json
 empty_prompts_json db '{"activeId":"","items":[]}'
 empty_prompts_json_len = $ - empty_prompts_json
-default_settings db '{"translate":true,"src":"zh-CN","dst":"en","provider":"mymemory","endpoint":"","model":"","key":"","mmEmail":"","mmKey":"","format":"both","uiLang":"auto","startup":false,"startMinimized":false,"lan":false,"port":19001,"oscPort":9000}'
+default_settings db '{"translate":true,"src":"zh-CN","dst":"en","provider":"mymemory","endpoint":"","model":"","key":"","aiCorrect":false,"mmEmail":"","mmKey":"","format":"both","uiLang":"auto","startup":false,"startMinimized":false,"lan":false,"port":19001,"oscPort":9000}'
 default_settings_len = $ - default_settings
 reuse_opt dd 1
 lan_fallback_json db '{"ip":"127.0.0.1","ips":["127.0.0.1"]}'

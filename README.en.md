@@ -8,7 +8,7 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 
 ## Features
 
-- Single executable release, currently about 90 KB.
+- Single executable release, currently about 99 KB.
 - Uses the system default browser for the UI.
 - UI copy supports automatic Chinese, English, Japanese, and Korean adaptation, and can be changed manually in Settings.
 - Creates a Windows notification-area tray icon after startup. Right-click it to open the UI, toggle LAN access, toggle Windows startup and minimized startup, or exit the background service.
@@ -25,7 +25,8 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 - Free public translation through MyMemory.
 - Optional MyMemory email for a higher free quota, and optional MyMemory key for private TM/authenticated usage.
 - Optional AI translation through OpenAI-compatible chat completion APIs.
-- AI mode can use the system default prompt or save, edit, delete, and switch between up to 6 custom prompt templates. The local service stores them in `prompts.json`, so they remain available after restart and from other devices using the same service.
+- AI mode can use the system default prompt or save, edit, delete, and switch between up to 6 custom prompt templates. The UI reports save state, and the local service validates and atomically updates `prompts.json`, so templates remain available after restart and from other devices using the same service.
+- AI mode can optionally correct source text before translation. In one request, the model conservatively fixes clear spelling or grammar errors while preserving meaning, tone, names, slang, and line breaks. Original + translation mode uses the corrected source. If a compatible API ignores the structured-output contract, the page safely falls back to its plain translation.
 - Inputs without natural-language letters, such as numbers, symbols, or emoji only, are sent unchanged without calling a translation API. The default AI prompt also requires untranslatable input to be returned verbatim.
 - Page heartbeat: each page creates its own session id and sends periodic heartbeats.
 - The background service does not exit automatically when pages are closed or heartbeats stop; use the tray menu to exit it.
@@ -51,6 +52,8 @@ Built-in presets:
 | Custom | user supplied | user supplied |
 
 The model name is always an editable text field. The DeepSeek preset only fills in the current default, `deepseek-v4-flash`, so users can enter a future model name without waiting for an application update. DeepSeek translation requests explicitly send `"thinking":{"type":"disabled"}` to avoid reasoning mode for ordinary translation.
+
+Source correction applies only to AI providers, not MyMemory. It does not make a second API call. The page appends a strict JSON output contract to the selected system prompt and also accepts JSON inside a Markdown code block; a plain-text model response remains usable as the translation. Numbers, symbols, and emoji-only input still bypass every translation API in the browser.
 
 Tencent Yuanbao itself is usually a consumer app, not a general third-party API. If you have Tencent model API access, use the Tencent Hunyuan preset or the custom OpenAI-compatible option.
 
