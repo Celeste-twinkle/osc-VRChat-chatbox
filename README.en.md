@@ -8,7 +8,7 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 
 ## Features
 
-- Single executable release, currently about 99 KB.
+- Single executable release, currently about 103 KiB.
 - Uses the system default browser for the UI.
 - UI copy supports automatic Chinese, English, Japanese, and Korean adaptation, and can be changed manually in Settings.
 - Creates a Windows notification-area tray icon after startup. Right-click it to open the UI, toggle LAN access, toggle Windows startup and minimized startup, or exit the background service.
@@ -21,12 +21,13 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 - Sends OSC to VRChat at `127.0.0.1:9000` with address `/chatbox/input`.
 - Sends VRChat typing state through `/chatbox/typing` while the user is typing. The page tries to turn typing off when text is sent, cleared, or the page is left.
 - Default source language is Chinese, default target language is English.
-- Use the controls above the input box to change source language, target language, and send format: original + translation, translation only, and original only. Click "Settings" to change startup, translation, provider, and API settings.
+- Use the controls above the input box to change source language, target language, and send format: original + translation, translation only, and original only. Bilingual output can be ordered as original → translation or translation → original. Click "Settings" to change startup, translation, provider, and API settings.
 - Free public translation through MyMemory.
 - Optional MyMemory email for a higher free quota, and optional MyMemory key for private TM/authenticated usage.
 - Optional AI translation through OpenAI-compatible chat completion APIs.
 - AI mode can use the system default prompt or save, edit, delete, and switch between up to 6 custom prompt templates. The UI reports save state, and the local service validates and atomically updates `prompts.json`, so templates remain available after restart and from other devices using the same service.
-- AI mode can optionally correct source text before translation. In one request, the model conservatively fixes clear spelling or grammar errors while preserving meaning, tone, names, slang, and line breaks. Original + translation mode uses the corrected source. If a compatible API ignores the structured-output contract, the page safely falls back to its plain translation.
+- AI mode provides a shared glossary with 30 language-neutral VRChat terms by default, including `VRChat`, `VRC`, `VCC`, `Udon`, `PhysBones`, `OSC`, and `FBT`. The list is curated from the [official VRChat localization guide](https://docs.vrchat.com/docs/suggesting-localization-changes), [Creator Companion glossary](https://vcc.docs.vrchat.com/guides/glossary/), [VRChat Creation documentation](https://creators.vrchat.com/), and [OSC documentation](https://docs.vrchat.com/docs/osc-overview). Each line can be a protected term or a `source => translation` mapping. The glossary is stored with prompt templates in `prompts.json`.
+- AI mode can optionally correct source text before translation. In one request, the model conservatively fixes clear spelling or grammar errors, prioritizes plausible glossary matches, and avoids forcing unrelated text into glossary terms. Original + translation mode uses the corrected source. If a compatible API ignores the structured-output contract, the page safely falls back to its plain translation.
 - Inputs without natural-language letters, such as numbers, symbols, or emoji only, are sent unchanged without calling a translation API. The default AI prompt also requires untranslatable input to be returned verbatim.
 - Page heartbeat: each page creates its own session id and sends periodic heartbeats.
 - The background service does not exit automatically when pages are closed or heartbeats stop; use the tray menu to exit it.
@@ -53,7 +54,7 @@ Built-in presets:
 
 The model name is always an editable text field. The DeepSeek preset only fills in the current default, `deepseek-v4-flash`, so users can enter a future model name without waiting for an application update. DeepSeek translation requests explicitly send `"thinking":{"type":"disabled"}` to avoid reasoning mode for ordinary translation.
 
-Source correction applies only to AI providers, not MyMemory. It does not make a second API call. The page appends a strict JSON output contract to the selected system prompt and also accepts JSON inside a Markdown code block; a plain-text model response remains usable as the translation. Numbers, symbols, and emoji-only input still bypass every translation API in the browser.
+Source correction and the glossary apply only to AI providers, not MyMemory. They do not make a second API call. The page supplies the glossary as highest-priority vocabulary data and, when correction is enabled, appends a strict JSON output contract. A protected term is preserved, while `source => translation` sets a preferred target form. Correction prioritizes a glossary replacement only for a plausible spelling or speech-recognition variant. The page also accepts JSON inside a Markdown code block; a plain-text model response remains usable as the translation. Numbers, symbols, and emoji-only input still bypass every translation API in the browser.
 
 Tencent Yuanbao itself is usually a consumer app, not a general third-party API. If you have Tencent model API access, use the Tencent Hunyuan preset or the custom OpenAI-compatible option.
 
@@ -91,13 +92,13 @@ settings.json
 
 This file may contain your API key or MyMemory key. Do not copy it, upload it, commit it, or send it to anyone.
 
-Custom AI prompt templates are stored beside the executable in:
+Custom AI prompt templates and the glossary are stored beside the executable in:
 
 ```text
 prompts.json
 ```
 
-This file may contain your custom instructions. Do not copy, upload, commit, or share either local data file.
+This file may contain your custom instructions and terminology. Do not copy, upload, commit, or share either local data file.
 
 ## Usage
 
@@ -105,7 +106,7 @@ This file may contain your custom instructions. Do not copy, upload, commit, or 
 2. Run `vrc-chatbox-osc.exe`.
 3. Windows opens `http://127.0.0.1:19001` in your default browser.
 4. Right-click the tray icon in the Windows notification area to choose "Open UI" or "Exit".
-5. Use the controls above the input box to change languages and send format. Click "Settings" to change UI language, translation, provider, API settings, startup, and minimized startup.
+5. Use the controls above the input box to change languages, send format, and bilingual order. Click "Settings" to change UI language, translation, provider, API settings, the AI glossary, startup, and minimized startup.
 6. Type text and press `Enter` to send or translate and send.
 7. Press `Shift + Enter` for a newline.
 8. Click "Clear" to clear the input box and turn typing state off.

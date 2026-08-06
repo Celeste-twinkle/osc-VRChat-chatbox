@@ -67,9 +67,14 @@
                             <div><label id="settingsDstLabel" for="settingsDst">目标语言</label><select
                                     id="settingsDst"></select></div>
                         </div>
-                        <div class="row2">
+                        <div class="row3">
                             <div><label id="settingsFmtLabel" for="settingsFmt">翻译格式</label><select
                                     id="settingsFmt"></select></div>
+                            <div><label id="settingsOrderLabel" for="settingsOrder">双语顺序</label><select
+                                    id="settingsOrder">
+                                    <option value="source-first">原文 → 译文</option>
+                                    <option value="translation-first">译文 → 原文</option>
+                                </select></div>
                             <div><label id="providerLabel" for="provider">翻译服务</label><select id="provider">
                                     <option value="mymemory">MyMemory 免费公开 API</option>
                                     <option value="openai">ChatGPT / OpenAI</option>
@@ -91,6 +96,41 @@
                                     aria-label="AI API Key" placeholder="AI API Key"></div>
                             <label class="toggle ai-correct"><input id="aiCorrect" type="checkbox">翻译前纠正原文</label>
                             <div id="aiCorrectHint" class="option-note">仅纠正明确的错别字、拼写和语法，保留原意、语气、专名与俚语。</div>
+                            <div class="glossary-field">
+                                <label id="glossaryLabel" for="aiGlossary">术语词库</label>
+                                <textarea id="aiGlossary" maxlength="2000" aria-describedby="glossaryHint"
+                                    placeholder="每行一个术语；可用 原文 => 译文 指定翻译">VRChat
+VRC
+VRChat+
+VRC+
+VRCat
+VRRat
+VRChat Credits
+VRChat SDK
+VRCSDK
+SDK3
+Avatars 3.0
+VRChat Creator Companion
+Creator Companion
+VCC
+VRChat Package Manager
+VPM
+VRC Quick Launcher
+VRCQL
+Udon
+UdonSharp
+U#
+ClientSim
+Avatar Dynamics
+PhysBones
+VRC Constraints
+Expressions Menu
+Expression Parameters
+OSC
+Chatbox
+FBT</textarea>
+                                <div id="glossaryHint" class="field-note">AI 会优先使用词库纠正语音识别错误并保持术语翻译一致。</div>
+                            </div>
                             <div class="prompt-manager">
                                 <label id="promptLabel" for="promptSelect">AI 提示词</label>
                                 <div class="prompt-actions"><select id="promptSelect"></select><button id="promptNew"
@@ -133,6 +173,10 @@
                         <option value="both">原文 + 译文</option>
                         <option value="trans">仅译文</option>
                         <option value="orig">仅原文（不翻译）</option>
+                    </select></div>
+                <div><label id="orderLabel" for="bothOrder">双语顺序</label><select id="bothOrder">
+                        <option value="source-first">原文 → 译文</option>
+                        <option value="translation-first">译文 → 原文</option>
                     </select></div>
             </div>
             <div class="wrap"><textarea id="text" autofocus aria-label="输入要发送到 VRChat Chatbox 的文字"

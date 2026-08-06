@@ -115,12 +115,14 @@ textarea:focus {
 .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-.quick { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
 select, input {
   width: 100%; border: 1px solid var(--border); border-radius: 8px;
   padding: 10px; background: var(--surface2); color: var(--text);
 }
 label { display: block; color: var(--text2); font-size: 12px; margin: 0 0 5px; }
+.quick > div:has(select:disabled),
+.row3 > div:has(select:disabled) { opacity: 0.58; }
 .lan {
   display: flex; justify-content: space-between; gap: 12px; align-items: center;
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
@@ -191,6 +193,12 @@ label { display: block; color: var(--text2); font-size: 12px; margin: 0 0 5px; }
 .option-note {
   margin: 0 0 12px 24px; color: var(--text2); font-size: 12px; line-height: 1.45;
 }
+.glossary-field { margin-bottom: 12px; }
+.glossary-field textarea {
+  min-height: 76px; padding: 10px; font-size: 13px; line-height: 1.5;
+  background: var(--surface); resize: vertical;
+}
+.field-note { margin-top: 6px; color: var(--text2); font-size: 12px; line-height: 1.45; }
 .prompt-manager {
   margin-bottom: 12px; padding: 12px; border: 1px solid var(--border);
   border-radius: 8px; background: var(--surface2);
@@ -241,7 +249,7 @@ button.r:hover { background: var(--danger-hover); }
   .lan-title code { white-space: normal; word-break: break-all; }
   #qrBtn.hide + #lanBtn { grid-column: span 2; }
   textarea { min-height: 120px; }
-  .quick { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin-bottom: 10px; }
+  .quick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
   .quick label { font-size: 11px; margin-bottom: 4px; }
   .quick select { padding: 8px 4px; font-size: 12px; min-width: 0; }
   .option-note { margin-left: 0; }
