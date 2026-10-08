@@ -123,6 +123,7 @@ npm test
 
 ```bat
 python native-asm\tests\regression.py
+node native-asm\tests\browser-integration.cjs
 ```
 
 常用文本只在第一次发现服务端文件缺失时迁移旧浏览器缓存。读取失败时先重试再编辑；未同步修改和上次读取的基础版本保留在浏览器缓存中，刷新后可恢复。保存请求按顺序执行，其他页面改变文件时自动合并；同一条目的冲突文本分别保留，合并后超过 100 条或字节预算时保留缓存并提示先删减。

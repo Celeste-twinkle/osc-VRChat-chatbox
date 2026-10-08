@@ -1,0 +1,36 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { execFileSync } = require('node:child_process');
+const root = path.resolve(__dirname, '../..');
+const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {cwd:root,encoding:'utf8'}).trim().split(/\r?\n/);
+const decoder = new TextDecoder('utf-8',{fatal:true});
+let checked = 0;
+for(const file of files) {
+  if(!/\.(?:md|js|cjs|json|html|css|inc|asm|py)$/i.test(file)) continue;
+  decoder.decode(fs.readFileSync(path.join(root,file)));
+  checked++;
+}
+const source = fs.readFileSync(path.join(root,'native-asm/ui/src/app.js'),'utf8');
+const start = source.indexOf('const I18N = '), end = source.indexOf('\nfunction pickLang(',start);
+assert.ok(start>=0&&end>start);
+const translations = JSON.parse(vm.runInNewContext(source.slice(start,end)+'\nJSON.stringify(I18N)'));
+const keys=Object.keys(translations.zh).sort();
+for(const [lang,table] of Object.entries(translations)) assert.deepEqual(Object.keys(table).sort(),keys,lang+' i18n keys');
+for(const match of source.matchAll(/\bL\("([A-Za-z0-9_]+)"\)/g)) assert.ok(match[1] in translations.zh,'Missing i18n: '+match[1]);
+const template=fs.readFileSync(path.join(root,'native-asm/ui/src/template.html'),'utf8');
+const ids=Array.from(template.matchAll(/\bid="([^"]+)"/g),match=>match[1]);
+assert.equal(ids.length,new Set(ids).size,'Duplicate HTML IDs');
+for(const match of source.matchAll(/\bbyId\("([^"]+)"\)/g)) assert.ok(ids.includes(match[1]),'Missing HTML ID: '+match[1]);
+const core=fs.readFileSync(path.join(root,'native-asm/modules/data-core.inc'),'utf8');
+const defaults=core.match(/default_settings db '([^']+)'/)[1];
+JSON.parse(defaults);
+const jsonModule=fs.readFileSync(path.join(root,'native-asm/modules/json.inc'),'utf8');
+assert.ok(jsonModule.split('\n').length>100,'Assembly parser must contain real line breaks');
+const html=fs.readFileSync(path.join(root,'native-asm/ui/dist/index.html'));
+const binary=fs.readFileSync(process.argv[2]||path.join(root,'native-asm/dist/vrc-chatbox-osc-asm.exe'));
+assert.ok(binary.includes(html),'Native EXE must embed the current UI build');
+const pe=binary.readUInt32LE(0x3c);
+assert.equal(binary.readUInt16LE(pe+4),0x14c,'Native EXE must remain 32-bit x86');
+console.log(`Source checks: ${checked} UTF-8 files; ${keys.length} keys per language; HTML IDs, default JSON, real assembly line breaks, and embedded UI verified.`);

@@ -1013,6 +1013,7 @@ function applyLang() {
   tx(qtTitle, "quickText");
   tx(qtHint, "quickTextHint");
   tx(qtSend, "send");
+  tx(trButton, "translateSend");
   tx(qtCopy, "copy");
   // 编辑态下 qtAdd 显示“保存”，所以由 updateQuickTextForm 统一设置。
   updateQuickTextForm();

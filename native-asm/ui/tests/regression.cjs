@@ -193,6 +193,7 @@ async function main() {
         await client.send('Emulation.setDeviceMetricsOverride',{width:320,height:812,deviceScaleFactor:1,mobile:false});
         const overflow=await client.eval(`['button','trButton','clearBubble','copyTextBtn','clearBtn'].filter(id=>{const e=document.getElementById(id);return getComputedStyle(e).display!=='none'&&e.scrollWidth>e.clientWidth+1;})`);
         assert.deepEqual(overflow,[]);
+        if(translate&&lang!=='zh') assert.notEqual(await client.eval(`document.getElementById('trButton').textContent`),'翻译发送');
       });
     }
   } finally { await browser.stop(); }

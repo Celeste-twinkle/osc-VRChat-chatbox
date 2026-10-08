@@ -1,5 +1,4 @@
 """Exercise a built native EXE in an isolated data directory (stdlib only)."""
-import ctypes
 import json
 import os
 import random
@@ -91,6 +90,7 @@ class NativeRegression(unittest.TestCase):
                  '{"items":[],"items":[]}', '{"items":[{"id":"a","id":"b","text":"x"}]}',
                  '{"items":[],"x":01}', '{"items":[],"x":1.}', '{"items":[],"x":1e}',
                  '{"items":[],"x":+1}', '{"items":[],"x":True}', '{"items":[],}',
+                 '{"items\\u0000id":[]}', '{"it\\u0065ms":[],"items":[]}',
                  '{"items":[{"id":"a","text":"raw\nnewline"}]}',
                  b'{"items":[{"id":"a","text":"\xc0\x80"}]}',
                  b'{"items":[{"id":"a","text":"\xed\xa0\x80"}]}',

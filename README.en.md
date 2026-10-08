@@ -8,7 +8,7 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 
 ## Features
 
-- Single executable release, currently about 103 KiB.
+- Single executable release, currently about 129 KiB.
 - Uses the system default browser for the UI.
 - UI copy supports automatic Chinese, English, Japanese, and Korean adaptation, and can be changed manually in Settings.
 - Creates a Windows notification-area tray icon after startup. Right-click it to open the UI, toggle LAN access, toggle Windows startup and minimized startup, or exit the background service.
