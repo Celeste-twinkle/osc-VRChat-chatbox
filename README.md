@@ -33,6 +33,7 @@
 - 后台服务不会因页面关闭或心跳停止而自动退出；可通过托盘菜单退出。
 - 如果旧服务已经在运行，再次启动 exe 会跳过启动服务流程，只打开已有页面。
 - 页面会在浏览器 localStorage 和 exe 同目录的 `history.json` 中保留发送历史；历史条数上限可在设置中自定义。历史列表位于发送状态文案下方，超过容器高度后滚动。点击历史项会填入原文 + 译文，编辑后发送不会自动重新翻译；长按历史项会直接重发，也可导出历史到文本文件。
+- 常用文本（快捷短语/链接）可在设置中新增、编辑、删除，最多 100 条；内容按原样直接发送或复制，不参与翻译，换行与首尾空格都会保留。内容保存在 exe 同目录的 `quicktext.json`，并在浏览器 localStorage 里缓存一份，所以换端口、换访问地址或换浏览器后依然在。
 
 ## 支持的 AI API
 
@@ -90,13 +91,14 @@ AI 设置、MyMemory email、MyMemory key、翻译格式、UI 语言和自启动
 settings.json
 ```
 
-自定义 AI 提示词模板和术语词库会保存在同目录下：
+自定义 AI 提示词模板、术语词库和常用文本会保存在同目录下：
 
 ```text
 prompts.json
+quicktext.json
 ```
 
-`settings.json` 可能包含你的 API Key 或 MyMemory key，`prompts.json` 可能包含你的自定义指令和术语。不要复制、上传、提交到 Git，或发送给任何人。
+`settings.json` 可能包含你的 API Key 或 MyMemory key，`prompts.json` 可能包含你的自定义指令和术语，`quicktext.json` 可能包含你保存的快捷短语。不要复制、上传、提交到 Git，或发送给任何人。
 
 ## 使用方法
 
@@ -163,7 +165,7 @@ Release 附件只需要包含：
 vrc-chatbox-osc.exe
 ```
 
-不要把 `settings.json` 或 `prompts.json` 放进发布包。
+不要把 `settings.json`、`prompts.json` 或 `quicktext.json` 放进发布包。
 
 ## License
 

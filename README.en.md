@@ -33,6 +33,7 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 - The background service does not exit automatically when pages are closed or heartbeats stop; use the tray menu to exit it.
 - If an old service is already running, launching the exe again skips server startup and only opens the existing page.
 - The page keeps sent history in browser localStorage and in `history.json` beside the executable. The history limit is configurable in Settings. The history sits below the send status text and scrolls when it exceeds its maximum height. Click a history item to fill original + translation; edits send as typed without auto-translating. Long-press a history item to resend directly, or export the history to a text file.
+- Common text (quick phrases and links) can be added, edited, and deleted in Settings, up to 100 entries. Entries are sent or copied verbatim without translation, and internal newlines and edge whitespace are preserved. They are stored in `quicktext.json` beside the executable and cached in browser localStorage, so they survive a changed port, a different address, or another browser.
 
 ## Supported AI APIs
 
@@ -92,13 +93,14 @@ settings.json
 
 This file may contain your API key or MyMemory key. Do not copy it, upload it, commit it, or send it to anyone.
 
-Custom AI prompt templates and the glossary are stored beside the executable in:
+Custom AI prompt templates, the glossary, and common text are stored beside the executable in:
 
 ```text
 prompts.json
+quicktext.json
 ```
 
-This file may contain your custom instructions and terminology. Do not copy, upload, commit, or share either local data file.
+This file may contain your custom instructions and terminology, and `quicktext.json` may contain your saved quick phrases. Do not copy, upload, commit, or share any of these local data files.
 
 ## Usage
 
@@ -165,7 +167,7 @@ The release asset should contain only:
 vrc-chatbox-osc.exe
 ```
 
-Do not include `settings.json` or `prompts.json` in a release package.
+Do not include `settings.json`, `prompts.json`, or `quicktext.json` in a release package.
 
 ## License
 

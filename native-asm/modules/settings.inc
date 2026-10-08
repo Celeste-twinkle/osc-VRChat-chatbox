@@ -97,15 +97,14 @@ settings_json_valid:
         xor     eax,eax
         ret
 
-prompts_json_valid:
-        push    ebx
-        push    edi
-        push    ebp
+; Shared snapshot check for the JSON stores: [body_ptr]/[settings_write_len]
+; must hold a non-empty object that starts with '{', ends with '}', and has
+; balanced braces and strings. Returns eax=1/0. The scan uses ebx/ebp/edi as
+; counters, so callers must save any register they still need.
+json_object_ok:
         mov     ecx,[settings_write_len]
         test    ecx,ecx
         jz      .no
-        cmp     ecx,prompts_max_size
-        ja      .no
         mov     esi,[body_ptr]
 .scan_start:
         mov     al,[esi]
@@ -142,9 +141,9 @@ prompts_json_valid:
         je      .prev_end
         cmp     al,'}'
         jne     .no
-        ; Reject truncated prompt snapshots before looking for their required
-        ; keys. The UI is the JSON producer, so a compact balance/string scan
-        ; gives useful corruption protection without embedding a full parser.
+        ; Reject truncated snapshots before the caller looks for required keys.
+        ; The UI is the JSON producer, so a compact balance/string scan gives
+        ; useful corruption protection without embedding a full parser.
         mov     esi,[body_ptr]
         mov     ecx,[settings_write_len]
         xor     ebx,ebx               ; object depth
@@ -205,6 +204,27 @@ prompts_json_valid:
         jnz     .no
         test    ebp,ebp
         jnz     .no
+        mov     eax,1
+        ret
+.prev_end:
+        dec     esi
+        dec     ecx
+        jnz     .scan_end
+.no:
+        xor     eax,eax
+        ret
+
+; A prompt snapshot must also carry the activeId/items pair the UI reads back.
+prompts_json_valid:
+        push    ebx
+        push    edi
+        push    ebp
+        mov     ecx,[settings_write_len]
+        cmp     ecx,prompts_max_size
+        ja      .no
+        call    json_object_ok
+        cmp     eax,1
+        jne     .no
         mov     edi,json_prompts_active_key
         mov     edx,json_prompts_active_key_len
         call    json_has_true
@@ -217,16 +237,23 @@ prompts_json_valid:
         jne     .no
         mov     eax,1
         jmp     .done
-.prev_end:
-        dec     esi
-        dec     ecx
-        jnz     .scan_end
 .no:
         xor     eax,eax
 .done:
         pop     ebp
         pop     edi
         pop     ebx
+        ret
+
+; The common-text store is a plain {"items":[...]} snapshot, so the balance
+; scan alone is enough to keep a truncated write out of quicktext.json.
+quicktext_json_valid:
+        mov     ecx,[settings_write_len]
+        cmp     ecx,quicktext_max_size
+        ja      .no
+        jmp     json_object_ok
+.no:
+        xor     eax,eax
         ret
 
 parse_settings_flags:

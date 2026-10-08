@@ -1,5 +1,6 @@
 localhost db '127.0.0.1',0
 prompts_max_size = 32768
+quicktext_max_size = 32768
 open_action db 'open',0
 url_prefix db 'http://127.0.0.1:',0
 url rb 32
@@ -28,6 +29,10 @@ get_prompts db 'GET /prompts '
 get_prompts_len = $ - get_prompts
 post_prompts db 'POST /prompts '
 post_prompts_len = $ - post_prompts
+get_quicktext db 'GET /quicktext '
+get_quicktext_len = $ - get_quicktext
+post_quicktext db 'POST /quicktext '
+post_quicktext_len = $ - post_quicktext
 post_session_open db 'POST /session/open '
 post_session_open_len = $ - post_session_open
 post_session_close db 'POST /session/close '
@@ -47,6 +52,8 @@ settings_file db 'settings.json',0
 history_file db 'history.json',0
 prompts_file db 'prompts.json',0
 prompts_temp_file db 'prompts.json.tmp',0
+quicktext_file db 'quicktext.json',0
+quicktext_temp_file db 'quicktext.json.tmp',0
 dns_probe_ip db '8.8.8.8',0
 startup_key db 'Software\Microsoft\Windows\CurrentVersion\Run',0
 startup_value db 'VRC Chatbox OSC',0
@@ -146,6 +153,8 @@ empty_json db '{}'
 empty_json_len = $ - empty_json
 empty_history_json db '[]'
 empty_history_json_len = $ - empty_history_json
+empty_quicktext_json db '{"items":[]}'
+empty_quicktext_json_len = $ - empty_quicktext_json
 ; Curated from VRChat's official localization guide, Creator Companion
 ; glossary, creator documentation, and OSC documentation. Keep synchronized
 ; with ui/src/template.html.

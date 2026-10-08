@@ -90,6 +90,14 @@ accept_loop:
         cmp     eax,1
         je      handle_post_prompts
 
+        call    is_get_quicktext
+        cmp     eax,1
+        je      handle_get_quicktext
+
+        call    is_post_quicktext
+        cmp     eax,1
+        je      handle_post_quicktext
+
         call    is_post_session_open
         cmp     eax,1
         je      handle_session_open
@@ -189,6 +197,14 @@ handle_get_prompts:
 
 handle_post_prompts:
         call    write_prompts
+        jmp     close_client
+
+handle_get_quicktext:
+        call    serve_quicktext
+        jmp     close_client
+
+handle_post_quicktext:
+        call    write_quicktext
         jmp     close_client
 
 handle_post_settings:

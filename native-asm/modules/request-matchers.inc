@@ -70,6 +70,24 @@ is_post_prompts:
         movzx   eax,al
         ret
 
+is_get_quicktext:
+        mov     esi,recv_buf
+        mov     edi,get_quicktext
+        mov     ecx,get_quicktext_len
+        repe    cmpsb
+        sete    al
+        movzx   eax,al
+        ret
+
+is_post_quicktext:
+        mov     esi,recv_buf
+        mov     edi,post_quicktext
+        mov     ecx,post_quicktext_len
+        repe    cmpsb
+        sete    al
+        movzx   eax,al
+        ret
+
 is_post_session_open:
         mov     esi,recv_buf
         mov     edi,post_session_open

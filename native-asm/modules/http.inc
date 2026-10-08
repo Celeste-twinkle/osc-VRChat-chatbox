@@ -244,6 +244,108 @@ write_prompts:
         invoke  send,[client_socket],http_500,http_500_len,0
         ret
 
+; Common text lives beside the other user data files instead of only in the
+; browser profile: localStorage is keyed by origin, so a changed port, a
+; localhost/127.0.0.1 switch, or a LAN address would each look like data loss.
+serve_quicktext:
+        invoke  CreateFile,quicktext_file,80000000h,1,0,3,80h,0
+        cmp     eax,-1
+        je      .empty
+        mov     [settings_handle],eax
+        invoke  ReadFile,[settings_handle],recv_buf,quicktext_max_size+1,bytes_done,0
+        invoke  CloseHandle,[settings_handle]
+        mov     eax,[bytes_done]
+        mov     [settings_write_len],eax
+        mov     dword [body_ptr],recv_buf
+        call    quicktext_json_valid
+        cmp     eax,1
+        jne     .empty
+        invoke  send,[client_socket],http_200_json,http_200_json_len,0
+        invoke  send,[client_socket],recv_buf,[bytes_done],0
+        ret
+.empty:
+        invoke  send,[client_socket],http_200_json,http_200_json_len,0
+        invoke  send,[client_socket],empty_quicktext_json,empty_quicktext_json_len,0
+        ret
+
+write_quicktext:
+        call    find_body
+        test    eax,eax
+        jz      .bad_request
+        mov     esi,eax
+        mov     [body_ptr],esi
+        call    parse_content_length
+        mov     [content_len],eax
+        test    eax,eax
+        jz      .bad_request
+        cmp     eax,quicktext_max_size
+        ja      .too_large
+        mov     ecx,[recv_len]
+        sub     ecx,[body_ptr]
+        add     ecx,recv_buf
+        mov     [body_have],ecx
+.read_more:
+        mov     eax,[body_have]
+        cmp     eax,[content_len]
+        jge     .len_ready
+        mov     eax,recv_buf
+        add     eax,[recv_len]
+        mov     edx,recv_buf_size-1
+        sub     edx,[recv_len]
+        jle     .len_ready
+        invoke  recv,[client_socket],eax,edx,0
+        cmp     eax,0
+        jle     .len_ready
+        add     [recv_len],eax
+        add     [body_have],eax
+        jmp     .read_more
+.len_ready:
+        mov     eax,[body_have]
+        cmp     eax,[content_len]
+        jb      .bad_request
+        mov     ecx,[content_len]
+        mov     [settings_write_len],ecx
+        call    quicktext_json_valid
+        cmp     eax,1
+        jne     .bad_request
+        ; Same atomic pattern as prompts: a failed write must never truncate
+        ; the last known-good collection.
+        invoke  CreateFile,quicktext_temp_file,40000000h,0,0,2,80h,0
+        cmp     eax,-1
+        je      .write_error
+        mov     [settings_handle],eax
+        invoke  WriteFile,[settings_handle],[body_ptr],[settings_write_len],bytes_done,0
+        mov     ebx,eax
+        test    ebx,ebx
+        jz      .mark_write_failed
+        mov     eax,[bytes_done]
+        cmp     eax,[settings_write_len]
+        jne     .mark_write_failed
+        invoke  FlushFileBuffers,[settings_handle]
+        mov     ebx,eax
+        jmp     .close_write
+.mark_write_failed:
+        xor     ebx,ebx
+.close_write:
+        invoke  CloseHandle,[settings_handle]
+        test    ebx,ebx
+        jz      .write_error
+        invoke  MoveFileEx,quicktext_temp_file,quicktext_file,MOVEFILE_REPLACE_EXISTING+MOVEFILE_WRITE_THROUGH
+        test    eax,eax
+        jz      .write_error
+        invoke  send,[client_socket],http_204,http_204_len,0
+        ret
+.bad_request:
+        invoke  send,[client_socket],http_400,http_400_len,0
+        ret
+.too_large:
+        invoke  send,[client_socket],http_413,http_413_len,0
+        ret
+.write_error:
+        invoke  DeleteFile,quicktext_temp_file
+        invoke  send,[client_socket],http_500,http_500_len,0
+        ret
+
 serve_settings:
         invoke  CreateFile,settings_file,80000000h,1,0,3,80h,0
         cmp     eax,-1

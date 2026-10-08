@@ -42,25 +42,37 @@
             <div id="settingsModal" class="modal hide">
                 <div class="panel">
                     <div class="ph"><b>设置</b><button id="settingsClose" class="x" type="button">关闭</button></div>
-                    <div class="row2">
-                        <div><label id="uiLangLabel" for="uiLang">UI 语言</label><select id="uiLang">
-                                <option value="auto">Auto</option>
-                                <option value="zh">中文</option>
-                                <option value="en">English</option>
-                                <option value="ja">日本語</option>
-                                <option value="ko">한국어</option>
-                            </select></div>
-                        <div><label id="histLimitLabel" for="histLimit">历史记录上限</label><input
-                                id="histLimit" type="number" min="1" max="200" value="100"></div>
-                        <div><label id="portLabel" for="port">端口</label><input
-                                id="port" type="number" min="1024" max="65535" value="19001"></div>
-                        <div><label id="oscPortLabel" for="oscPort">OSC 端口</label><input
-                                id="oscPort" type="number" min="1024" max="65535" value="9000"></div>
-                    </div><label class="toggle"><input id="startup" type="checkbox">开机自启动</label><label
-                        class="toggle sub"><input id="startMinimized" type="checkbox">最小化自启动（开机启动时不打开浏览器）</label><label
-                        class="toggle"><input id="trOn" type="checkbox">启用翻译</label><label class="toggle"><input
-                            id="notifySfx" type="checkbox" checked>提示音</label>
-                    <div id="trBox" class="hide">
+                    <div class="sect">
+                        <div class="sect-title" id="sectGeneral">常规</div>
+                        <div class="row2">
+                            <div><label id="uiLangLabel" for="uiLang">UI 语言</label><select id="uiLang">
+                                    <option value="auto">Auto</option>
+                                    <option value="zh">中文</option>
+                                    <option value="en">English</option>
+                                    <option value="ja">日本語</option>
+                                    <option value="ko">한국어</option>
+                                </select></div>
+                            <div><label id="histLimitLabel" for="histLimit">历史记录上限</label><input
+                                    id="histLimit" type="number" min="1" max="200" value="100"></div>
+                        </div>
+                        <label class="toggle"><input id="startup" type="checkbox">开机自启动</label><label
+                            class="toggle sub"><input id="startMinimized" type="checkbox">最小化自启动（开机启动时不打开浏览器）</label><label
+                            class="toggle"><input id="notifySfx" type="checkbox" checked>提示音</label><label
+                            class="toggle"><input id="typingOn" type="checkbox" checked>输入状态</label>
+                    </div>
+                    <div class="sect">
+                        <div class="sect-title" id="sectNetwork">网络</div>
+                        <div class="row2">
+                            <div><label id="portLabel" for="port">端口</label><input
+                                    id="port" type="number" min="1024" max="65535" value="19001"></div>
+                            <div><label id="oscPortLabel" for="oscPort">OSC 端口</label><input
+                                    id="oscPort" type="number" min="1024" max="65535" value="9000"></div>
+                        </div>
+                    </div>
+                    <div class="sect">
+                        <div class="sect-title" id="sectTranslate">翻译</div>
+                        <label class="toggle"><input id="trOn" type="checkbox">启用翻译</label>
+                        <div id="trBox" class="hide">
                         <div class="row2">
                             <div><label id="settingsSrcLabel" for="settingsSrc">源语言</label><select
                                     id="settingsSrc"></select></div>
@@ -148,6 +160,22 @@ FBT</textarea>
                             </div>
                         </div>
                     </div>
+                    </div><!-- /sect 翻译 -->
+                    <div class="sect">
+                        <div class="sect-title" id="sectCommonText">常用文本</div>
+                        <div class="qt-form"><textarea id="qtInput" rows="2"
+                                placeholder="添加常用短语或链接..."></textarea><button id="qtAdd" class="x"
+                                type="button">添加</button><button id="qtCancel" class="g hide"
+                                type="button">取消</button></div>
+                        <div id="qtCount" class="qt-count"></div>
+                        <div id="qtList" class="qt-list"></div>
+                        <div id="qtHint" class="field-note">常用文本按原样发送，不参与翻译；保存在本机应用数据里，并缓存在当前浏览器。</div>
+                    </div>
+                    <div class="sect">
+                        <div class="sect-title" id="sectHistory">历史记录</div>
+                        <div class="sect-actions"><button id="exportHistory" class="x" type="button">导出历史</button><button
+                                id="clearHistory" class="r" type="button">清空历史</button></div>
+                    </div>
                 </div>
             </div>
             <div id="quickTr" class="quick hide">
@@ -186,13 +214,19 @@ FBT</textarea>
                 <div class="h" id="hint">Enter 发送，Shift + Enter 换行</div>
                 <div class="sends"><button id="trButton" class="send-tr" type="button">翻译发送</button><button
                         id="button" class="send-direct" type="button">发送</button></div>
-                <div class="rw"><button id="clearBubble" class="g" type="button">清除气泡</button><button id="clearBtn"
-                        class="r" type="button">清空</button></div>
+                <div class="rw"><button id="clearBubble" class="g" type="button">清除气泡</button><button id="copyTextBtn"
+                        class="g" type="button">复制文本</button><button id="clearBtn" class="r" type="button">清空</button></div>
             </div>
             <div class="m" id="message"></div>
+            <!-- 常用文本放在输入与发送之后：不打断“输入 → 发送”的连贯性，
+                 也不随条目数量变高。管理与清空历史都在设置里。 -->
+            <div class="qt">
+                <span id="qtTitle" class="qt-title">常用文本</span>
+                <select id="qtSelect" aria-label="常用文本"></select>
+                <button id="qtSend" class="x" type="button">发送</button>
+                <button id="qtCopy" class="x" type="button">复制</button>
+            </div>
             <div class="hscroll">
-                <div id="hbar" class="hbar hide"><button id="clearHistory" class="r" type="button">清空历史</button><button
-                        id="exportHistory" class="x" type="button">导出历史</button></div>
                 <div id="hnote" class="hnote hide"></div>
                 <div id="hlist" class="hlist"></div>
             </div>
