@@ -196,6 +196,17 @@ class NativeRegression(unittest.TestCase):
             self.assertEqual(self.request('POST', body)[0], 204)
             self.assertEqual(json.loads(self.request()[1]), value)
 
+    def test_escaped_property_names_and_nesting_bound(self):
+        body = '{"it\\u0065ms":[{"\\u0069d":"one","te\\u0078t":"ok"}]}'
+        self.assertEqual(self.request('POST', body)[0], 204)
+        self.assertEqual(json.loads(self.request()[1]), {'items': [{'id': 'one', 'text': 'ok'}]})
+        value = 0
+        for _ in range(63):
+            value = {'x': value}
+        body = json.dumps({'items': [], 'meta': value})
+        self.assertEqual(self.request('POST', body)[0], 204)
+        self.assertEqual(self.request('POST', json.dumps({'items': [], 'meta': {'x': value}}))[0], 400)
+
 
 if __name__ == '__main__':
     if os.name != 'nt':

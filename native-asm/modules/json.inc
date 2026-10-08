@@ -1,1 +1,605 @@
-; Bounded JSON grammar/UTF-8 validation, without extra DLL imports.\n; Parsing routines consume esi/ecx, return eax=1/0, and preserve edi/ebp.\n; ebx is the remaining nesting budget. Store validators preserve ebx/edi/ebp.\njson_object_ok:\n        push    ebx\n        push    edi\n        push    ebp\n        mov     esi,[body_ptr]\n        mov     ecx,[settings_write_len]\n        mov     ebx,64\n        call    json_skip_space\n        test    ecx,ecx\n        jz      .no\n        cmp     byte [esi],'{'\n        jne     .no\n        call    json_parse_object\n        test    eax,eax\n        jz      .done\n        call    json_skip_space\n        test    ecx,ecx\n        jnz     .no\n        mov     eax,1\n        jmp     .done\n.no:\n        xor     eax,eax\n.done:\n        pop     ebp\n        pop     edi\n        pop     ebx\n        ret\n\njson_skip_space:\n        test    ecx,ecx\n        jz      .done\n.next:\n        mov     al,[esi]\n        cmp     al,' '\n        je      .consume\n        cmp     al,9\n        je      .consume\n        cmp     al,10\n        je      .consume\n        cmp     al,13\n        jne     .done\n.consume:\n        inc     esi\n        dec     ecx\n        jnz     .next\n.done:\n        ret\n\njson_parse_value:\n        call    json_skip_space\n        test    ecx,ecx\n        jz      json_invalid\n        mov     al,[esi]\n        cmp     al,'"'\n        je      json_parse_string\n        cmp     al,'{'\n        je      json_parse_object\n        cmp     al,'['\n        je      json_parse_array\n        cmp     al,'t'\n        je      .true\n        cmp     al,'f'\n        je      .false\n        cmp     al,'n'\n        je      .null\n        jmp     json_parse_number\n.true:\n        cmp     ecx,4\n        jb      json_invalid\n        cmp     dword [esi],'true'\n        jne     json_invalid\n        mov     edx,4\n        jmp     .literal\n.false:\n        cmp     ecx,5\n        jb      json_invalid\n        cmp     dword [esi],'fals'\n        jne     json_invalid\n        cmp     byte [esi+4],'e'\n        jne     json_invalid\n        mov     edx,5\n        jmp     .literal\n.null:\n        cmp     ecx,4\n        jb      json_invalid\n        cmp     dword [esi],'null'\n        jne     json_invalid\n        mov     edx,4\n.literal:\n        add     esi,edx\n        sub     ecx,edx\n        mov     eax,1\n        ret\n\njson_parse_object:\n        dec     ebx\n        js      .depth_fail\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        test    ecx,ecx\n        jz      .no\n        cmp     byte [esi],'}'\n        je      .close\n.key:\n        test    ecx,ecx\n        jz      .no\n        cmp     byte [esi],'"'\n        jne     .no\n        call    json_parse_string\n        test    eax,eax\n        jz      .no\n        call    json_skip_space\n        test    ecx,ecx\n        jz      .no\n        cmp     byte [esi],':'\n        jne     .no\n        inc     esi\n        dec     ecx\n        call    json_parse_value\n        test    eax,eax\n        jz      .no\n        call    json_skip_space\n        test    ecx,ecx\n        jz      .no\n        cmp     byte [esi],'}'\n        je      .close\n        cmp     byte [esi],','\n        jne     .no\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        jmp     .key\n.close:\n        inc     esi\n        dec     ecx\n        inc     ebx\n        mov     eax,1\n        ret\n.no:\n        inc     ebx\n        jmp     json_invalid\n.depth_fail:\n        inc     ebx\n        jmp     json_invalid\n\njson_parse_array:\n        dec     ebx\n        js      .depth_fail\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        test    ecx,ecx\n        jz      .no\n        cmp     byte [esi],']'\n        je      .close\n.value:\n        call    json_parse_value\n        test    eax,eax\n        jz      .no\n        call    json_skip_space\n        test    ecx,ecx\n        jz      .no\n        cmp     byte [esi],']'\n        je      .close\n        cmp     byte [esi],','\n        jne     .no\n        inc     esi\n        dec     ecx\n        jmp     .value\n.close:\n        inc     esi\n        dec     ecx\n        inc     ebx\n        mov     eax,1\n        ret\n.no:\n        inc     ebx\n        jmp     json_invalid\n.depth_fail:\n        inc     ebx\n        jmp     json_invalid\n\njson_parse_string:\n        inc     esi\n        dec     ecx\n.next:\n        test    ecx,ecx\n        jz      json_invalid\n        mov     al,[esi]\n        cmp     al,'"'\n        je      .close\n        cmp     al,20h\n        jb      json_invalid\n        cmp     al,'\'\n        je      .escape\n        cmp     al,80h\n        jae     .utf8\n.ascii:\n        inc     esi\n        dec     ecx\n        jmp     .next\n.escape:\n        inc     esi\n        dec     ecx\n        jz      json_invalid\n        mov     al,[esi]\n        cmp     al,'"'\n        je      .ascii\n        cmp     al,'\'\n        je      .ascii\n        cmp     al,'/'\n        je      .ascii\n        cmp     al,'b'\n        je      .ascii\n        cmp     al,'f'\n        je      .ascii\n        cmp     al,'n'\n        je      .ascii\n        cmp     al,'r'\n        je      .ascii\n        cmp     al,'t'\n        je      .ascii\n        cmp     al,'u'\n        jne     json_invalid\n        cmp     ecx,5\n        jb      json_invalid\n        mov     edx,4\n.hex:\n        inc     esi\n        dec     ecx\n        mov     al,[esi]\n        cmp     al,'0'\n        jb      json_invalid\n        cmp     al,'9'\n        jbe     .hex_ok\n        or      al,20h\n        cmp     al,'a'\n        jb      json_invalid\n        cmp     al,'f'\n        ja      json_invalid\n.hex_ok:\n        dec     edx\n        jnz     .hex\n        jmp     .ascii\n.utf8:\n        cmp     al,0C2h\n        jb      json_invalid\n        cmp     al,0DFh\n        jbe     .two\n        cmp     al,0EFh\n        jbe     .three\n        cmp     al,0F4h\n        ja      json_invalid\n        cmp     ecx,4\n        jb      json_invalid\n        cmp     al,0F0h\n        jne     .not_f0\n        cmp     byte [esi+1],90h\n        jb      json_invalid\n.not_f0:\n        cmp     al,0F4h\n        jne     .four_tail\n        cmp     byte [esi+1],8Fh\n        ja      json_invalid\n.four_tail:\n        mov     al,[esi+3]\n        and     al,0C0h\n        cmp     al,80h\n        jne     json_invalid\n        mov     edx,4\n        jmp     .three_tail\n.three:\n        cmp     ecx,3\n        jb      json_invalid\n        cmp     al,0E0h\n        jne     .not_e0\n        cmp     byte [esi+1],0A0h\n        jb      json_invalid\n.not_e0:\n        cmp     al,0EDh\n        jne     .three_ready\n        cmp     byte [esi+1],9Fh\n        ja      json_invalid\n.three_ready:\n        mov     edx,3\n.three_tail:\n        mov     al,[esi+2]\n        and     al,0C0h\n        cmp     al,80h\n        jne     json_invalid\n        jmp     .continuation\n.two:\n        cmp     ecx,2\n        jb      json_invalid\n        mov     edx,2\n.continuation:\n        mov     al,[esi+1]\n        and     al,0C0h\n        cmp     al,80h\n        jne     json_invalid\n        add     esi,edx\n        sub     ecx,edx\n        jmp     .next\n.close:\n        inc     esi\n        dec     ecx\n        mov     eax,1\n        ret\n\njson_parse_number:\n        cmp     byte [esi],'-'\n        jne     .integer\n        inc     esi\n        dec     ecx\n        jz      json_invalid\n.integer:\n        cmp     byte [esi],'0'\n        je      .zero\n        cmp     byte [esi],'1'\n        jb      json_invalid\n        cmp     byte [esi],'9'\n        ja      json_invalid\n        call    json_digits\n        jmp     .fraction\n.zero:\n        inc     esi\n        dec     ecx\n.fraction:\n        test    ecx,ecx\n        jz      .yes\n        cmp     byte [esi],'.'\n        jne     .exponent\n        inc     esi\n        dec     ecx\n        call    json_digits\n        test    eax,eax\n        jz      json_invalid\n.exponent:\n        test    ecx,ecx\n        jz      .yes\n        mov     al,[esi]\n        or      al,20h\n        cmp     al,'e'\n        jne     .yes\n        inc     esi\n        dec     ecx\n        jz      json_invalid\n        cmp     byte [esi],'+'\n        je      .sign\n        cmp     byte [esi],'-'\n        jne     .exp_digits\n.sign:\n        inc     esi\n        dec     ecx\n.exp_digits:\n        call    json_digits\n        ret\n.yes:\n        mov     eax,1\n        ret\n\njson_digits:\n        xor     edx,edx\n.next:\n        test    ecx,ecx\n        jz      .done\n        cmp     byte [esi],'0'\n        jb      .done\n        cmp     byte [esi],'9'\n        ja      .done\n        inc     edx\n        inc     esi\n        dec     ecx\n        jmp     .next\n.done:\n        xor     eax,eax\n        test    edx,edx\n        setnz   al\n        ret\n\njson_invalid:\n        xor     eax,eax\n        ret\n\n; Require a root items array with at most 100 objects, each carrying string\n; id/text fields. Extra properties are allowed and checked by the JSON parser.\nquicktext_schema_ok:\n        push    ebx\n        push    edi\n        push    ebp\n        mov     esi,[body_ptr]\n        mov     ecx,[settings_write_len]\n        mov     ebx,64\n        xor     ebp,ebp\n        call    json_skip_space\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        cmp     byte [esi],'}'\n        je      .no\n.key:\n        mov     edi,esi\n        call    json_parse_string\n        mov     eax,esi\n        sub     eax,edi\n        xor     edx,edx\n        cmp     eax,7\n        jne     .colon\n        cmp     dword [edi],'"ite'\n        jne     .colon\n        cmp     word [edi+4],'ms'\n        jne     .colon\n        cmp     byte [edi+6],'"'\n        jne     .colon\n        mov     edx,1\n.colon:\n        call    json_skip_space\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        test    edx,edx\n        jz      .other\n        test    ebp,ebp\n        jnz     .no\n        mov     ebp,1\n        cmp     byte [esi],'['\n        jne     .no\n        call    quicktext_array_ok\n        jmp     .value_done\n.other:\n        call    json_parse_value\n.value_done:\n        test    eax,eax\n        jz      .no\n        call    json_skip_space\n        cmp     byte [esi],'}'\n        je      .finish_value\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        jmp     .key\n.finish_value:\n        mov     eax,ebp\n        jmp     .done\n.no:\n        xor     eax,eax\n.done:\n        pop     ebp\n        pop     edi\n        pop     ebx\n        ret\n\nquicktext_array_ok:\n        push    edi\n        xor     edi,edi\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        cmp     byte [esi],']'\n        je      .yes\n.item:\n        cmp     byte [esi],'{'\n        jne     .no\n        inc     edi\n        cmp     edi,100\n        ja      .no\n        call    quicktext_item_ok\n        test    eax,eax\n        jz      .no\n        call    json_skip_space\n        cmp     byte [esi],']'\n        je      .yes\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        jmp     .item\n.yes:\n        inc     esi\n        dec     ecx\n        mov     eax,1\n        jmp     .done\n.no:\n        xor     eax,eax\n.done:\n        pop     edi\n        ret\n\nquicktext_item_ok:\n        push    edi\n        push    ebp\n        xor     ebp,ebp\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        cmp     byte [esi],'}'\n        je      .no\n.key:\n        mov     edi,esi\n        call    json_parse_string\n        mov     eax,esi\n        sub     eax,edi\n        xor     edx,edx\n        cmp     eax,4\n        jne     .text\n        cmp     dword [edi],'"id"'\n        jne     .colon\n        mov     edx,1\n        jmp     .colon\n.text:\n        cmp     eax,6\n        jne     .colon\n        cmp     dword [edi],'"tex'\n        jne     .colon\n        cmp     word [edi+4],'t"'\n        jne     .colon\n        mov     edx,2\n.colon:\n        call    json_skip_space\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        test    edx,edx\n        jz      .other\n        test    ebp,edx\n        jnz     .no\n        or      ebp,edx\n        cmp     byte [esi],'"'\n        jne     .no\n        call    json_parse_string\n        jmp     .value_done\n.other:\n        call    json_parse_value\n.value_done:\n        test    eax,eax\n        jz      .no\n        call    json_skip_space\n        cmp     byte [esi],'}'\n        je      .finish_value\n        inc     esi\n        dec     ecx\n        call    json_skip_space\n        jmp     .key\n.finish_value:\n        cmp     ebp,3\n        jne     .no\n        inc     esi\n        dec     ecx\n        mov     eax,1\n        jmp     .done\n.no:\n        xor     eax,eax\n.done:\n        pop     ebp\n        pop     edi\n        ret\n
+; Bounded JSON grammar/UTF-8 validation, without extra DLL imports.
+; Parsing routines consume esi/ecx, return eax=1/0, and preserve edi/ebp.
+; ebx is the remaining nesting budget. Store validators preserve ebx/edi/ebp.
+json_object_ok:
+        push    ebx
+        push    edi
+        push    ebp
+        mov     esi,[body_ptr]
+        mov     ecx,[settings_write_len]
+        mov     ebx,64
+        call    json_skip_space
+        test    ecx,ecx
+        jz      .no
+        cmp     byte [esi],'{'
+        jne     .no
+        call    json_parse_object
+        test    eax,eax
+        jz      .done
+        call    json_skip_space
+        test    ecx,ecx
+        jnz     .no
+        mov     eax,1
+        jmp     .done
+.no:
+        xor     eax,eax
+.done:
+        pop     ebp
+        pop     edi
+        pop     ebx
+        ret
+
+json_skip_space:
+        test    ecx,ecx
+        jz      .done
+.next:
+        mov     al,[esi]
+        cmp     al,' '
+        je      .consume
+        cmp     al,9
+        je      .consume
+        cmp     al,10
+        je      .consume
+        cmp     al,13
+        jne     .done
+.consume:
+        inc     esi
+        dec     ecx
+        jnz     .next
+.done:
+        ret
+
+json_parse_value:
+        call    json_skip_space
+        test    ecx,ecx
+        jz      json_invalid
+        mov     al,[esi]
+        cmp     al,'"'
+        je      json_parse_string
+        cmp     al,'{'
+        je      json_parse_object
+        cmp     al,'['
+        je      json_parse_array
+        cmp     al,'t'
+        je      .true
+        cmp     al,'f'
+        je      .false
+        cmp     al,'n'
+        je      .null
+        jmp     json_parse_number
+.true:
+        cmp     ecx,4
+        jb      json_invalid
+        cmp     dword [esi],'true'
+        jne     json_invalid
+        mov     edx,4
+        jmp     .literal
+.false:
+        cmp     ecx,5
+        jb      json_invalid
+        cmp     dword [esi],'fals'
+        jne     json_invalid
+        cmp     byte [esi+4],'e'
+        jne     json_invalid
+        mov     edx,5
+        jmp     .literal
+.null:
+        cmp     ecx,4
+        jb      json_invalid
+        cmp     dword [esi],'null'
+        jne     json_invalid
+        mov     edx,4
+.literal:
+        add     esi,edx
+        sub     ecx,edx
+        mov     eax,1
+        ret
+
+json_parse_object:
+        dec     ebx
+        js      .depth_fail
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        test    ecx,ecx
+        jz      .no
+        cmp     byte [esi],'}'
+        je      .close
+.key:
+        test    ecx,ecx
+        jz      .no
+        cmp     byte [esi],'"'
+        jne     .no
+        call    json_parse_string
+        test    eax,eax
+        jz      .no
+        call    json_skip_space
+        test    ecx,ecx
+        jz      .no
+        cmp     byte [esi],':'
+        jne     .no
+        inc     esi
+        dec     ecx
+        call    json_parse_value
+        test    eax,eax
+        jz      .no
+        call    json_skip_space
+        test    ecx,ecx
+        jz      .no
+        cmp     byte [esi],'}'
+        je      .close
+        cmp     byte [esi],','
+        jne     .no
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        jmp     .key
+.close:
+        inc     esi
+        dec     ecx
+        inc     ebx
+        mov     eax,1
+        ret
+.no:
+        inc     ebx
+        jmp     json_invalid
+.depth_fail:
+        inc     ebx
+        jmp     json_invalid
+
+json_parse_array:
+        dec     ebx
+        js      .depth_fail
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        test    ecx,ecx
+        jz      .no
+        cmp     byte [esi],']'
+        je      .close
+.value:
+        call    json_parse_value
+        test    eax,eax
+        jz      .no
+        call    json_skip_space
+        test    ecx,ecx
+        jz      .no
+        cmp     byte [esi],']'
+        je      .close
+        cmp     byte [esi],','
+        jne     .no
+        inc     esi
+        dec     ecx
+        jmp     .value
+.close:
+        inc     esi
+        dec     ecx
+        inc     ebx
+        mov     eax,1
+        ret
+.no:
+        inc     ebx
+        jmp     json_invalid
+.depth_fail:
+        inc     ebx
+        jmp     json_invalid
+
+json_parse_string:
+        inc     esi
+        dec     ecx
+.next:
+        test    ecx,ecx
+        jz      json_invalid
+        mov     al,[esi]
+        cmp     al,'"'
+        je      .close
+        cmp     al,20h
+        jb      json_invalid
+        cmp     al,'\'
+        je      .escape
+        cmp     al,80h
+        jae     .utf8
+.ascii:
+        inc     esi
+        dec     ecx
+        jmp     .next
+.escape:
+        inc     esi
+        dec     ecx
+        jz      json_invalid
+        mov     al,[esi]
+        cmp     al,'"'
+        je      .ascii
+        cmp     al,'\'
+        je      .ascii
+        cmp     al,'/'
+        je      .ascii
+        cmp     al,'b'
+        je      .ascii
+        cmp     al,'f'
+        je      .ascii
+        cmp     al,'n'
+        je      .ascii
+        cmp     al,'r'
+        je      .ascii
+        cmp     al,'t'
+        je      .ascii
+        cmp     al,'u'
+        jne     json_invalid
+        cmp     ecx,5
+        jb      json_invalid
+        mov     edx,4
+.hex:
+        inc     esi
+        dec     ecx
+        mov     al,[esi]
+        cmp     al,'0'
+        jb      json_invalid
+        cmp     al,'9'
+        jbe     .hex_ok
+        or      al,20h
+        cmp     al,'a'
+        jb      json_invalid
+        cmp     al,'f'
+        ja      json_invalid
+.hex_ok:
+        dec     edx
+        jnz     .hex
+        jmp     .ascii
+.utf8:
+        cmp     al,0C2h
+        jb      json_invalid
+        cmp     al,0DFh
+        jbe     .two
+        cmp     al,0EFh
+        jbe     .three
+        cmp     al,0F4h
+        ja      json_invalid
+        cmp     ecx,4
+        jb      json_invalid
+        cmp     al,0F0h
+        jne     .not_f0
+        cmp     byte [esi+1],90h
+        jb      json_invalid
+.not_f0:
+        cmp     al,0F4h
+        jne     .four_tail
+        cmp     byte [esi+1],8Fh
+        ja      json_invalid
+.four_tail:
+        mov     al,[esi+3]
+        and     al,0C0h
+        cmp     al,80h
+        jne     json_invalid
+        mov     edx,4
+        jmp     .three_tail
+.three:
+        cmp     ecx,3
+        jb      json_invalid
+        cmp     al,0E0h
+        jne     .not_e0
+        cmp     byte [esi+1],0A0h
+        jb      json_invalid
+.not_e0:
+        cmp     al,0EDh
+        jne     .three_ready
+        cmp     byte [esi+1],9Fh
+        ja      json_invalid
+.three_ready:
+        mov     edx,3
+.three_tail:
+        mov     al,[esi+2]
+        and     al,0C0h
+        cmp     al,80h
+        jne     json_invalid
+        jmp     .continuation
+.two:
+        cmp     ecx,2
+        jb      json_invalid
+        mov     edx,2
+.continuation:
+        mov     al,[esi+1]
+        and     al,0C0h
+        cmp     al,80h
+        jne     json_invalid
+        add     esi,edx
+        sub     ecx,edx
+        jmp     .next
+.close:
+        inc     esi
+        dec     ecx
+        mov     eax,1
+        ret
+
+json_parse_number:
+        cmp     byte [esi],'-'
+        jne     .integer
+        inc     esi
+        dec     ecx
+        jz      json_invalid
+.integer:
+        cmp     byte [esi],'0'
+        je      .zero
+        cmp     byte [esi],'1'
+        jb      json_invalid
+        cmp     byte [esi],'9'
+        ja      json_invalid
+        call    json_digits
+        jmp     .fraction
+.zero:
+        inc     esi
+        dec     ecx
+.fraction:
+        test    ecx,ecx
+        jz      .yes
+        cmp     byte [esi],'.'
+        jne     .exponent
+        inc     esi
+        dec     ecx
+        call    json_digits
+        test    eax,eax
+        jz      json_invalid
+.exponent:
+        test    ecx,ecx
+        jz      .yes
+        mov     al,[esi]
+        or      al,20h
+        cmp     al,'e'
+        jne     .yes
+        inc     esi
+        dec     ecx
+        jz      json_invalid
+        cmp     byte [esi],'+'
+        je      .sign
+        cmp     byte [esi],'-'
+        jne     .exp_digits
+.sign:
+        inc     esi
+        dec     ecx
+.exp_digits:
+        call    json_digits
+        ret
+.yes:
+        mov     eax,1
+        ret
+
+json_digits:
+        xor     edx,edx
+.next:
+        test    ecx,ecx
+        jz      .done
+        cmp     byte [esi],'0'
+        jb      .done
+        cmp     byte [esi],'9'
+        ja      .done
+        inc     edx
+        inc     esi
+        dec     ecx
+        jmp     .next
+.done:
+        xor     eax,eax
+        test    edx,edx
+        setnz   al
+        ret
+
+json_invalid:
+        xor     eax,eax
+        ret
+
+; Compare a validated JSON key with an ASCII field name, decoding \u escapes.
+; edi points at the opening quote, esi just after the closing quote, edx at
+; the expected zero-terminated name. Preserve the surrounding parser state.
+json_key_equals:
+        push    ebx
+        push    edi
+        push    ecx
+        push    esi
+        mov     ebx,esi
+        dec     ebx
+        mov     esi,edx
+        inc     edi
+.next:
+        cmp     edi,ebx
+        je      .end_key
+        movzx   eax,byte [edi]
+        inc     edi
+        cmp     al,'\'
+        jne     .compare
+        cmp     byte [edi],'u'
+        jne     .no
+        inc     edi
+        xor     edx,edx
+        mov     ecx,4
+.hex:
+        movzx   eax,byte [edi]
+        cmp     al,'9'
+        jbe     .digit
+        or      al,20h
+        sub     eax,'a'-10
+        jmp     .nibble
+.digit:
+        sub     eax,'0'
+.nibble:
+        shl     edx,4
+        or      edx,eax
+        inc     edi
+        loop    .hex
+        mov     eax,edx
+        cmp     eax,127
+        ja      .no
+.compare:
+        cmp     byte [esi],0
+        je      .no
+        cmp     al,[esi]
+        jne     .no
+        inc     esi
+        jmp     .next
+.end_key:
+        xor     eax,eax
+        cmp     byte [esi],0
+        sete    al
+        jmp     .done
+.no:
+        xor     eax,eax
+.done:
+        pop     esi
+        pop     ecx
+        pop     edi
+        pop     ebx
+        ret
+
+; Require a root items array with at most 100 objects, each carrying string
+; id/text fields. Extra properties are allowed and checked by the JSON parser.
+quicktext_schema_ok:
+        push    ebx
+        push    edi
+        push    ebp
+        mov     esi,[body_ptr]
+        mov     ecx,[settings_write_len]
+        mov     ebx,64
+        xor     ebp,ebp
+        call    json_skip_space
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        cmp     byte [esi],'}'
+        je      .no
+.key:
+        mov     edi,esi
+        call    json_parse_string
+        mov     edx,json_quick_items_name
+        call    json_key_equals
+        mov     edx,eax
+.colon:
+        call    json_skip_space
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        test    edx,edx
+        jz      .other
+        test    ebp,ebp
+        jnz     .no
+        mov     ebp,1
+        cmp     byte [esi],'['
+        jne     .no
+        call    quicktext_array_ok
+        jmp     .value_done
+.other:
+        call    json_parse_value
+.value_done:
+        test    eax,eax
+        jz      .no
+        call    json_skip_space
+        cmp     byte [esi],'}'
+        je      .finish_value
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        jmp     .key
+.finish_value:
+        mov     eax,ebp
+        jmp     .done
+.no:
+        xor     eax,eax
+.done:
+        pop     ebp
+        pop     edi
+        pop     ebx
+        ret
+
+quicktext_array_ok:
+        push    edi
+        xor     edi,edi
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        cmp     byte [esi],']'
+        je      .yes
+.item:
+        cmp     byte [esi],'{'
+        jne     .no
+        inc     edi
+        cmp     edi,100
+        ja      .no
+        call    quicktext_item_ok
+        test    eax,eax
+        jz      .no
+        call    json_skip_space
+        cmp     byte [esi],']'
+        je      .yes
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        jmp     .item
+.yes:
+        inc     esi
+        dec     ecx
+        mov     eax,1
+        jmp     .done
+.no:
+        xor     eax,eax
+.done:
+        pop     edi
+        ret
+
+quicktext_item_ok:
+        push    edi
+        push    ebp
+        xor     ebp,ebp
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        cmp     byte [esi],'}'
+        je      .no
+.key:
+        mov     edi,esi
+        call    json_parse_string
+        mov     edx,json_quick_id_name
+        call    json_key_equals
+        test    eax,eax
+        jz      .text
+        mov     edx,1
+        jmp     .colon
+.text:
+        mov     edx,json_quick_text_name
+        call    json_key_equals
+        lea     edx,[eax+eax]
+.colon:
+        call    json_skip_space
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        test    edx,edx
+        jz      .other
+        test    ebp,edx
+        jnz     .no
+        or      ebp,edx
+        cmp     byte [esi],'"'
+        jne     .no
+        call    json_parse_string
+        jmp     .value_done
+.other:
+        call    json_parse_value
+.value_done:
+        test    eax,eax
+        jz      .no
+        call    json_skip_space
+        cmp     byte [esi],'}'
+        je      .finish_value
+        inc     esi
+        dec     ecx
+        call    json_skip_space
+        jmp     .key
+.finish_value:
+        cmp     ebp,3
+        jne     .no
+        inc     esi
+        dec     ecx
+        mov     eax,1
+        jmp     .done
+.no:
+        xor     eax,eax
+.done:
+        pop     ebp
+        pop     edi
+        ret

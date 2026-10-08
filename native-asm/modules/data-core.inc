@@ -138,6 +138,9 @@ quicktext_header_end_len = $ - quicktext_header_end
 quicktext_hex db '0123456789abcdef'
 if_match_header db 'if-match:'
 if_match_header_len = $ - if_match_header
+json_quick_items_name db 'items',0
+json_quick_id_name db 'id',0
+json_quick_text_name db 'text',0
 
 http_412 db 'HTTP/1.1 412 Precondition Failed',13,10
          db 'Connection: close',13,10

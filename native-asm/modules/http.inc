@@ -237,8 +237,7 @@ write_prompts:
         invoke  send,[client_socket],http_400,http_400_len,0
         ret
 .too_large:
-        invoke  send,[client_socket],http_413,http_413_len,0
-        ret
+        jmp     send_too_large
 .write_error:
         invoke  DeleteFile,prompts_temp_file
         invoke  send,[client_socket],http_500,http_500_len,0
@@ -375,11 +374,40 @@ write_quicktext:
         invoke  send,[client_socket],http_400,http_400_len,0
         ret
 .too_large:
-        invoke  send,[client_socket],http_413,http_413_len,0
-        ret
+        jmp     send_too_large
 .write_error:
         invoke  DeleteFile,quicktext_temp_file
         invoke  send,[client_socket],http_500,http_500_len,0
+        ret
+
+; Finish the error response before closing a socket with an unread body.
+; Otherwise Winsock can reset the connection and hide the HTTP 413. Bound
+; both the receive wait and the discarded bytes for untrusted large requests.
+send_too_large:
+        invoke  send,[client_socket],http_413,http_413_len,0
+        invoke  shutdown,[client_socket],1
+        invoke  setsockopt,[client_socket],0FFFFh,1006h,drain_timeout,4
+        mov     ebp,[content_len]
+        mov     eax,[recv_len]
+        sub     eax,[body_ptr]
+        add     eax,recv_buf
+        sub     ebp,eax
+        jle     .done
+        cmp     ebp,recv_buf_size
+        jbe     .read
+        mov     ebp,recv_buf_size
+.read:
+        mov     eax,settings_buf_size
+        cmp     ebp,eax
+        jae     .receive
+        mov     eax,ebp
+.receive:
+        invoke  recv,[client_socket],settings_buf,eax,0
+        test    eax,eax
+        jle     .done
+        sub     ebp,eax
+        jg      .read
+.done:
         ret
 
 ; A compact content tag prevents stale browser snapshots from replacing a

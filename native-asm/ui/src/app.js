@@ -101,6 +101,7 @@ let timer = 0,
   promptTimer = 0,
   typingTimer = 0,
   typingVisible = false, // last typing state reported to the server
+  settingsLoaded = false,
   history = [],
   hidCounter = 0,
   tapTimer = 0,
@@ -1078,6 +1079,7 @@ function beat() {
 beat();
 setInterval(beat, 3000);
 function setTyping(on) {
+  if (!settingsLoaded && !typingVisible) return;
   // 设置里关闭“输入状态”后不再上报 typing=true；但已经上报过的状态仍然要补发
   // 一次 typing=false，否则 VRChat 一侧的输入指示会一直残留。
   if (!typingOn.checked) {
@@ -1552,6 +1554,7 @@ async function load() {
     bothOrder.value = normalizedOrder(j.bothOrder);
     notifySfx.checked = j.notifySfx !== false;
     typingOn.checked = j.typingOn !== false;
+    settingsLoaded = true;
     syncSettingsFromQuick();
     uiLang.value = j.uiLang || "auto";
     lang = pickLang(uiLang.value);
@@ -1568,6 +1571,8 @@ async function load() {
   } catch (e) {
     syncStartup();
     applyLang();
+  } finally {
+    if (settingsLoaded && (text.value.trim() || typingVisible)) sendTyping();
   }
 }
 async function save() {

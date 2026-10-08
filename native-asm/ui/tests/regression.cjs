@@ -43,7 +43,11 @@ function fixture(config = {}) {
         });
         return Promise.resolve(save());
       }
-      if (url === '/settings' && method === 'GET') return Promise.resolve(response({translate:!!config.translate,provider:'mymemory',uiLang:config.lang || 'zh',typingOn:config.typingOn !== false}));
+      if (url === '/settings' && method === 'GET') {
+        const data={translate:!!config.translate,provider:'mymemory',uiLang:config.lang || 'zh',typingOn:config.typingOn !== false};
+        if (config.settingsRead==='deferred') return new Promise(resolve=>{__test.resolveSettings=()=>resolve(response(data));});
+        return Promise.resolve(response(data));
+      }
       if (url === '/prompts') return Promise.resolve(response({activeId:'',items:[]}));
       if (url === '/history' && method === 'GET') return Promise.resolve(response([]));
       if (url === '/lan-ip') return Promise.resolve(response({ip:'127.0.0.1',port:19001,enabled:false,allowed:false}));
@@ -173,6 +177,16 @@ async function main() {
       assert.equal((await cache(client)).items.length,101);
       assert.equal((await cache(client)).pending,true);
       assert.deepEqual(await posts(client),[]);
+      await add(client,'must not drop pending entries');
+      assert.equal((await cache(client)).items.length,101);
+    });
+    await test('disabled typing stays off before settings finish loading', {typingOn:false,settingsRead:'deferred'}, async client => {
+      await client.eval(`document.getElementById('text').value='early draft';document.getElementById('text').dispatchEvent(new Event('input'))`);
+      await pause(350);
+      assert.deepEqual(await client.eval(`__test.typing`),[]);
+      await client.eval(`__test.resolveSettings()`);
+      await until(client, `document.getElementById('typingOn').checked===false`);
+      assert.deepEqual(await client.eval(`__test.typing`),[]);
     });
     for (const lang of ['zh','en','ja','ko']) for (const translate of [false,true]) {
       await test('320px layout: '+lang+', translate='+translate, {lang,translate,server:[entry('one','long text')]}, async client => {
