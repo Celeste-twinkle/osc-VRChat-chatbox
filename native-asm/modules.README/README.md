@@ -16,6 +16,7 @@ server.asm 只定义 FASM 段并按原有输出顺序 include 模块。模块的
 | bootstrap | WinSock、监听套接字和应用启动 |
 | router | HTTP 接收循环与端点处理分发 |
 | settings / startup | 设置文件、启动项和 JSON 布尔字段 |
+| json | 有界 JSON 语法、UTF-8 和常用文本结构校验 |
 | lifecycle / tray | 退出、会话端点和系统托盘 |
 | request-matchers / command-line | 请求与命令行前缀识别 |
 | lan-listener / lan-discovery | LAN 监听与网卡地址发现 |

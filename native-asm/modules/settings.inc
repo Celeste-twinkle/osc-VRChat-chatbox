@@ -38,45 +38,9 @@ write_default_settings:
         ret
 
 settings_json_valid:
-        mov     ecx,[settings_write_len]
-        test    ecx,ecx
+        call    json_object_ok
+        test    eax,eax
         jz      .no
-        mov     esi,[body_ptr]
-.scan_start:
-        mov     al,[esi]
-        cmp     al,' '
-        je      .next_start
-        cmp     al,9
-        je      .next_start
-        cmp     al,13
-        je      .next_start
-        cmp     al,10
-        je      .next_start
-        cmp     al,'{'
-        jne     .no
-        jmp     .scan_end_init
-.next_start:
-        inc     esi
-        dec     ecx
-        jnz     .scan_start
-        jmp     .no
-.scan_end_init:
-        mov     ecx,[settings_write_len]
-        mov     esi,[body_ptr]
-        add     esi,ecx
-        dec     esi
-.scan_end:
-        mov     al,[esi]
-        cmp     al,' '
-        je      .prev_end
-        cmp     al,9
-        je      .prev_end
-        cmp     al,13
-        je      .prev_end
-        cmp     al,10
-        je      .prev_end
-        cmp     al,'}'
-        jne     .no
         mov     edi,json_translate_key
         mov     edx,json_translate_key_len
         call    json_has_true
@@ -89,130 +53,11 @@ settings_json_valid:
         jne     .no
         mov     eax,1
         ret
-.prev_end:
-        dec     esi
-        dec     ecx
-        jnz     .scan_end
 .no:
         xor     eax,eax
         ret
 
-; Shared snapshot check for the JSON stores: [body_ptr]/[settings_write_len]
-; must hold a non-empty object that starts with '{', ends with '}', and has
-; balanced braces and strings. Returns eax=1/0. The scan uses ebx/ebp/edi as
-; counters, so callers must save any register they still need.
-json_object_ok:
-        mov     ecx,[settings_write_len]
-        test    ecx,ecx
-        jz      .no
-        mov     esi,[body_ptr]
-.scan_start:
-        mov     al,[esi]
-        cmp     al,' '
-        je      .next_start
-        cmp     al,9
-        je      .next_start
-        cmp     al,13
-        je      .next_start
-        cmp     al,10
-        je      .next_start
-        cmp     al,'{'
-        jne     .no
-        jmp     .scan_end_init
-.next_start:
-        inc     esi
-        dec     ecx
-        jnz     .scan_start
-        jmp     .no
-.scan_end_init:
-        mov     ecx,[settings_write_len]
-        mov     esi,[body_ptr]
-        add     esi,ecx
-        dec     esi
-.scan_end:
-        mov     al,[esi]
-        cmp     al,' '
-        je      .prev_end
-        cmp     al,9
-        je      .prev_end
-        cmp     al,13
-        je      .prev_end
-        cmp     al,10
-        je      .prev_end
-        cmp     al,'}'
-        jne     .no
-        ; Reject truncated snapshots before the caller looks for required keys.
-        ; The UI is the JSON producer, so a compact balance/string scan gives
-        ; useful corruption protection without embedding a full parser.
-        mov     esi,[body_ptr]
-        mov     ecx,[settings_write_len]
-        xor     ebx,ebx               ; object depth
-        xor     ebp,ebp               ; array depth
-        xor     edi,edi               ; bit 0: string, bit 1: escape
-.scan_structure:
-        mov     al,[esi]
-        test    edi,1
-        jz      .outside_string
-        cmp     al,20h
-        jb      .no
-        test    edi,2
-        jz      .string_char
-        and     edi,not 2
-        jmp     .next_structure
-.string_char:
-        cmp     al,'\'
-        jne     .string_quote
-        or      edi,2
-        jmp     .next_structure
-.string_quote:
-        cmp     al,'"'
-        jne     .next_structure
-        and     edi,not 1
-        jmp     .next_structure
-.outside_string:
-        cmp     al,'"'
-        jne     .open_object
-        or      edi,1
-        jmp     .next_structure
-.open_object:
-        cmp     al,'{'
-        jne     .close_object
-        inc     ebx
-        jmp     .next_structure
-.close_object:
-        cmp     al,'}'
-        jne     .open_array
-        dec     ebx
-        js      .no
-        jmp     .next_structure
-.open_array:
-        cmp     al,'['
-        jne     .close_array
-        inc     ebp
-        jmp     .next_structure
-.close_array:
-        cmp     al,']'
-        jne     .next_structure
-        dec     ebp
-        js      .no
-.next_structure:
-        inc     esi
-        loop    .scan_structure
-        test    edi,3
-        jnz     .no
-        test    ebx,ebx
-        jnz     .no
-        test    ebp,ebp
-        jnz     .no
-        mov     eax,1
-        ret
-.prev_end:
-        dec     esi
-        dec     ecx
-        jnz     .scan_end
-.no:
-        xor     eax,eax
-        ret
+include 'modules/json.inc'
 
 ; A prompt snapshot must also carry the activeId/items pair the UI reads back.
 prompts_json_valid:
@@ -245,13 +90,15 @@ prompts_json_valid:
         pop     ebx
         ret
 
-; The common-text store is a plain {"items":[...]} snapshot, so the balance
-; scan alone is enough to keep a truncated write out of quicktext.json.
+; Check the complete JSON grammar and the quick-text snapshot schema.
 quicktext_json_valid:
         mov     ecx,[settings_write_len]
         cmp     ecx,quicktext_max_size
         ja      .no
-        jmp     json_object_ok
+        call    json_object_ok
+        test    eax,eax
+        jz      .no
+        jmp     quicktext_schema_ok
 .no:
         xor     eax,eax
         ret

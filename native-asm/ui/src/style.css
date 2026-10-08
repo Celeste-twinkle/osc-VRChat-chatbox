@@ -290,8 +290,8 @@ button.r:hover { background: var(--danger-hover); }
   header, .row, .row2, .row3, .lan { align-items: stretch; grid-template-columns: 1fr; flex-direction: column; }
   .a { gap: 6px; margin-top: 10px; }
   .a .h { flex: 1 1 100%; }
-  .sends, .rw { flex: 1 1 0; min-width: 0; margin-left: 0; gap: 6px; }
-  .sends button, .rw button { flex: 1 1 0; width: auto; min-width: 0; padding: 10px 2px; font-size: 11px; }
+  .sends, .rw { flex: 1 1 100%; min-width: 0; margin-left: 0; gap: 6px; }
+  .sends button, .rw button { flex: 1 1 0; width: auto; min-width: 0; padding: 10px 6px; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
   .qt { gap: 6px; margin-top: 8px; }
   .qt-title { font-size: 11px; }
   .qt select { padding: 8px 6px; font-size: 12px; }

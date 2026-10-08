@@ -34,6 +34,7 @@ This version has been rewritten from Node.js to 32-bit Win32 assembly and is bui
 - If an old service is already running, launching the exe again skips server startup and only opens the existing page.
 - The page keeps sent history in browser localStorage and in `history.json` beside the executable. The history limit is configurable in Settings. The history sits below the send status text and scrolls when it exceeds its maximum height. Click a history item to fill original + translation; edits send as typed without auto-translating. Long-press a history item to resend directly, or export the history to a text file.
 - Common text (quick phrases and links) can be added, edited, and deleted in Settings, up to 100 entries. Entries are sent or copied verbatim without translation, and internal newlines and edge whitespace are preserved. They are stored in `quicktext.json` beside the executable and cached in browser localStorage, so they survive a changed port, a different address, or another browser.
+- Editing waits for the initial load. Failed saves remain in the browser and are recovered and retried after a reload. Concurrent edits from different pages are merged with conflicting text preserved; an intentionally empty file is never repopulated from a stale browser cache.
 
 ## Supported AI APIs
 

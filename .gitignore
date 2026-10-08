@@ -1,5 +1,7 @@
 settings.json
 prompts.json
+quicktext.json
+quicktext.json.tmp
 *.zip
 native-asm/dist/
 native-asm/release/

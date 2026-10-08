@@ -48,6 +48,7 @@ startup_key_handle dd 0
 bytes_done dd 0
 recv_timeout dd 2000
 settings_write_len dd 0
+quicktext_if_match dd 0
 startup_cmd_len dd 0
 tmp_socket dd 0
 sockaddr_len dd 16

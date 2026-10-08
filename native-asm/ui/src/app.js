@@ -67,6 +67,7 @@ const byId = (id) => document.getElementById(id),
   qtInput = byId("qtInput"),
   qtAdd = byId("qtAdd"),
   qtCancel = byId("qtCancel"),
+  qtRetry = byId("qtRetry"),
   qtCount = byId("qtCount"),
   qtList = byId("qtList"),
   qtHint = byId("qtHint"),
@@ -150,6 +151,7 @@ const SYSTEM_PROMPT_ID = "",
   QUICK_TEXT_MAX = 100,
   // quicktext.json 的字节上限（asm 侧 quicktext_max_size = 32768），留余量先自己拦。
   QUICK_TEXT_BYTES_MAX = 30000,
+  QUICK_TEXT_MISSING_ETAG = '"missing00"',
   DEFAULT_GLOSSARY = aiGlossary.value.trim(),
   DEFAULT_AI_PROMPT =
     "You are a translation engine. Translate the user text from {source} to {target}. Return only the translated text, with no quotes, labels, or commentary. If the input contains no translatable natural-language text or cannot be translated, return the original text unchanged.",
@@ -391,6 +393,11 @@ const I18N = {
     quickTextTooLarge:
       "常用文本总量过大，无法保存到本机文件。请缩短内容或删除部分条目。",
     quickTextLocalOnly: "未能保存到本机文件，暂时只保存在当前浏览器。",
+    quickTextLoading: "正在读取常用文本…",
+    quickTextLoadFail: "读取失败，已有文本仍保留。请重试后再修改。",
+    quickTextSaving: "正在保存常用文本…",
+    quickTextRetry: "重试",
+    quickTextMerged: "多个页面的修改已合并，冲突文本均已保留。",
     copy: "复制",
     copyText: "复制文本",
     copiedText: "已复制到剪贴板。",
@@ -536,6 +543,11 @@ const I18N = {
       "Common text is too large to save to the local data file. Shorten an entry or delete some.",
     quickTextLocalOnly:
       "Could not save to the local data file; kept in this browser only.",
+    quickTextLoading: "Loading common text…",
+    quickTextLoadFail: "Could not load common text. Your text is kept; retry before editing.",
+    quickTextSaving: "Saving common text…",
+    quickTextRetry: "Retry",
+    quickTextMerged: "Changes from other pages were merged; conflicting text was kept.",
     copy: "Copy",
     copyText: "Copy text",
     copiedText: "Copied to clipboard.",
@@ -683,6 +695,11 @@ const I18N = {
       "よく使うテキストの合計が大きすぎてローカルファイルに保存できません。内容を短くするか項目を削除してください。",
     quickTextLocalOnly:
       "ローカルファイルに保存できませんでした。このブラウザにのみ保存されています。",
+    quickTextLoading: "よく使うテキストを読み込み中…",
+    quickTextLoadFail: "読み込めませんでした。テキストは保持されています。再試行してから編集してください。",
+    quickTextSaving: "よく使うテキストを保存中…",
+    quickTextRetry: "再試行",
+    quickTextMerged: "他のページの変更を統合しました。競合するテキストはすべて保持されています。",
     copy: "コピー",
     copyText: "テキストをコピー",
     copiedText: "クリップボードにコピーしました。",
@@ -813,6 +830,11 @@ const I18N = {
       "자주 쓰는 텍스트의 총량이 너무 커서 로컬 파일에 저장할 수 없습니다. 내용을 줄이거나 항목을 삭제하세요.",
     quickTextLocalOnly:
       "로컬 파일에 저장하지 못했습니다. 이 브라우저에만 저장됩니다.",
+    quickTextLoading: "자주 쓰는 텍스트를 불러오는 중…",
+    quickTextLoadFail: "불러오지 못했습니다. 텍스트는 보존됩니다. 다시 시도한 후 편집하세요.",
+    quickTextSaving: "자주 쓰는 텍스트를 저장하는 중…",
+    quickTextRetry: "다시 시도",
+    quickTextMerged: "다른 페이지의 변경을 병합하고 충돌한 텍스트를 모두 보존했습니다.",
     copy: "복사",
     copyText: "텍스트 복사",
     copiedText: "클립보드에 복사했습니다.",
@@ -1874,19 +1896,31 @@ async function copyTextValue(value, okKey) {
     return false;
   }
   try {
+    let copied = false;
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(content);
-    } else {
+      try {
+        await navigator.clipboard.writeText(content);
+        copied = true;
+      } catch (e) {}
+    }
+    if (!copied) {
+      const focused = document.activeElement;
       const helper = document.createElement("textarea");
       helper.value = content;
       helper.setAttribute("readonly", "");
       helper.style.position = "fixed";
       helper.style.opacity = "0";
       document.body.appendChild(helper);
-      helper.select();
-      document.execCommand("copy");
-      helper.remove();
+      try {
+        helper.focus();
+        helper.select();
+        copied = document.execCommand("copy");
+      } finally {
+        helper.remove();
+        if (focused && focused.focus) focused.focus();
+      }
     }
+    if (!copied) throw Error("copy failed");
     message.textContent = L(okKey || "copiedText");
     message.className = "m";
     return true;
@@ -1938,8 +1972,21 @@ let editingQuickTextId = "";
 /* 权威副本是 exe 旁边的 quicktext.json，localStorage 只当首屏缓存：
    它按 origin 隔离，换端口 / localhost↔127.0.0.1 / 局域网地址 / 换浏览器
    都会各存一份，看起来就像数据丢了。 */
-let quickTextsTouched = false,
-  quickTextNotice = "";
+let quickTextReady = false,
+  quickTextLoading = false,
+  quickTextSaving = false,
+  quickTextRevision = 0,
+  quickTextSavedRevision = 0,
+  quickTextBaseItems = [],
+  quickTextETag = "",
+  quickTextLegacy = false,
+  quickTextNotice = "",
+  quickTextMerged = false;
+function copyQuickTexts(items) {
+  return items
+    .filter((item) => item && typeof item.id === "string" && typeof item.text === "string")
+    .map((item) => ({ id: item.id, text: item.text }));
+}
 /* 按 UTF-8 字节算（中文 3 字节），因为服务端上限是字节数。 */
 function byteLength(s) {
   if (typeof TextEncoder !== "undefined")
@@ -1956,7 +2003,11 @@ function writeLocalQuickTexts() {
   try {
     localStorage.setItem(
       quickTextKey,
-      JSON.stringify(quickTexts.slice(0, QUICK_TEXT_MAX)),
+      JSON.stringify({
+        items: quickTexts,
+        pending: quickTextRevision !== quickTextSavedRevision,
+        baseItems: quickTextBaseItems,
+      }),
     );
   } catch (e) {}
 }
@@ -1967,9 +2018,9 @@ function setQuickTextNotice(key) {
 /* 服务端与本地缓存的条目都要过一遍同样的清洗：空白条目丢弃、id 去重补全。 */
 function applyQuickTexts(list, preferId) {
   const src = Array.isArray(list) ? list : [],
-    seen = {};
+    seen = Object.create(null);
   quickTexts = [];
-  for (let i = 0; i < src.length && quickTexts.length < QUICK_TEXT_MAX; i++) {
+  for (let i = 0; i < src.length; i++) {
     const item = src[i];
     if (!item || typeof item.text !== "string" || !item.text.trim()) continue;
     const id =
@@ -1983,43 +2034,104 @@ function applyQuickTexts(list, preferId) {
   renderQuickTexts(preferId);
 }
 async function syncQuickTexts() {
-  let data = null;
+  if (quickTextLoading || quickTextSaving) return;
+  quickTextLoading = true;
+  quickTextReady = false;
+  updateQuickTextForm();
   try {
     const r = await fetch("/quicktext");
-    if (r.ok) data = await r.json();
-  } catch (e) {}
-  // 请求返回前用户已经改过：不要覆盖他刚做的编辑。
-  if (quickTextsTouched) return;
-  const items = data && Array.isArray(data.items) ? data.items : [];
-  if (items.length) {
-    applyQuickTexts(items);
+    if (!r.ok) throw Error();
+    const data = await r.json(), etag = r.headers.get("ETag");
+    if (!data || !Array.isArray(data.items) || !etag) throw Error();
+    const pending = quickTextRevision !== quickTextSavedRevision;
+    if (pending) {
+      applyQuickTexts(mergeQuickTextChanges(data.items, quickTextBaseItems, quickTexts));
+    } else if (etag === QUICK_TEXT_MISSING_ETAG && quickTextLegacy && quickTexts.length) {
+      quickTextRevision++;
+    } else {
+      applyQuickTexts(data.items);
+    }
+    quickTextBaseItems = copyQuickTexts(data.items);
+    quickTextETag = etag;
+    quickTextLegacy = false;
+    quickTextReady = true;
+    quickTextNotice = "";
     writeLocalQuickTexts();
-    return;
+  } catch (e) {
+    quickTextNotice = "quickTextLoadFail";
+  } finally {
+    quickTextLoading = false;
+    renderQuickTexts();
   }
-  // exe 侧还空着（升级后的第一次）：把只存在浏览器里的旧数据迁移过去。
-  if (quickTexts.length) saveQuickTexts();
+  if (quickTextReady && quickTextRevision !== quickTextSavedRevision) saveQuickTexts();
 }
-function saveQuickTexts() {
-  const items = quickTexts.slice(0, QUICK_TEXT_MAX);
-  writeLocalQuickTexts();
-  if (!quickTextsFit(items)) {
-    setQuickTextNotice("quickTextTooLarge");
-    return;
+/* Replay local edits over the newest file. Keep both texts when two pages
+   edited the same entry instead of silently discarding either version. */
+function mergeQuickTextChanges(remote, base, local) {
+  const baseById = new Map(base.map((item) => [item.id, item])),
+    localById = new Map(local.map((item) => [item.id, item]));
+  const merged = copyQuickTexts(remote).filter((item) => {
+    const before = baseById.get(item.id);
+    if (before && !localById.has(item.id) && item.text !== before.text) quickTextMerged = true;
+    return !before || localById.has(item.id) || item.text !== before.text;
+  });
+  for (const item of local) {
+    const before = baseById.get(item.id);
+    if (before && before.text === item.text) continue;
+    const index = merged.findIndex((entry) => entry.id === item.id);
+    if (index >= 0 && merged[index].text === item.text) continue;
+    if (index >= 0 && before && merged[index].text === before.text) {
+      merged[index] = { id: item.id, text: item.text };
+    } else {
+      if (index >= 0 || before) quickTextMerged = true;
+      merged.unshift({ id: index >= 0 ? newQuickTextId() : item.id, text: item.text });
+    }
   }
-  fetch("/quicktext", {
-    method: "POST",
-    headers: { "Content-Type": "application/json;charset=utf-8" },
-    body: quickTextsBody(items),
-    keepalive: true,
-  })
-    .then(function (r) {
-      if (!r.ok) throw Error();
-      setQuickTextNotice("");
-    })
-    .catch(function () {
-      // 写文件失败时内容仍在本机浏览器里，所以只提示，不丢数据。
+  return merged;
+}
+async function saveQuickTexts() {
+  writeLocalQuickTexts();
+  if (!quickTextReady || quickTextSaving || quickTextLoading) return;
+  quickTextSaving = true;
+  let conflicts = 0;
+  try {
+    while (quickTextRevision !== quickTextSavedRevision) {
+      if (quickTexts.length > QUICK_TEXT_MAX || !quickTextsFit(quickTexts)) {
+        setQuickTextNotice("quickTextTooLarge");
+        break;
+      }
+      const revision = quickTextRevision, items = copyQuickTexts(quickTexts);
+      quickTextNotice = "";
+      updateQuickTextForm();
+      const r = await fetch("/quicktext", {
+        method: "POST",
+        headers: { "Content-Type": "application/json;charset=utf-8", "If-Match": quickTextETag },
+        body: quickTextsBody(items),
+      });
+      if (r.status === 412 && conflicts++ < 3) {
+        const latest = await fetch("/quicktext");
+        if (!latest.ok) throw Error();
+        const data = await latest.json(), etag = latest.headers.get("ETag");
+        if (!data || !Array.isArray(data.items) || !etag) throw Error();
+        applyQuickTexts(mergeQuickTextChanges(data.items, quickTextBaseItems, quickTexts));
+        quickTextBaseItems = copyQuickTexts(data.items);
+        quickTextETag = etag;
+        writeLocalQuickTexts();
+        continue;
+      }
+      const etag = r.headers.get("ETag");
+      if (!r.ok || !etag) throw Error();
+      quickTextBaseItems = items;
+      quickTextETag = etag;
+      quickTextSavedRevision = revision;
+      writeLocalQuickTexts();
+    }
+  } catch (e) {
       setQuickTextNotice("quickTextLocalOnly");
-    });
+  } finally {
+    quickTextSaving = false;
+    updateQuickTextForm();
+  }
 }
 function updateQuickTextForm() {
   const editing = !!quickTextById(editingQuickTextId);
@@ -2027,9 +2139,14 @@ function updateQuickTextForm() {
   qtAdd.textContent = L(editing ? "quickTextSave" : "quickTextAdd");
   qtCancel.textContent = L("quickTextCancel");
   qtCancel.className = editing ? "g" : "g hide";
-  if (quickTextNotice) {
-    qtCount.textContent = L(quickTextNotice);
-    qtCount.className = "qt-count error";
+  qtRetry.textContent = L("quickTextRetry");
+  qtInput.disabled = qtAdd.disabled = !quickTextReady;
+  qtList.querySelectorAll("button").forEach((button) => { button.disabled = !quickTextReady; });
+  qtRetry.className = quickTextNotice && !quickTextLoading && !quickTextSaving ? "g" : "g hide";
+  const notice = quickTextLoading ? "quickTextLoading" : quickTextNotice || (quickTextSaving ? "quickTextSaving" : quickTextMerged ? "quickTextMerged" : "");
+  if (notice) {
+    qtCount.textContent = L(notice);
+    qtCount.className = "qt-count" + (quickTextNotice ? " error" : "");
     return;
   }
   qtCount.className = "qt-count";
@@ -2045,6 +2162,7 @@ function updateQuickTextForm() {
     .replace("{max}", String(QUICK_TEXT_MAX));
 }
 function startQuickTextEdit(id) {
+  if (!quickTextReady) return;
   const item = quickTextById(id);
   if (!item) return;
   editingQuickTextId = id;
@@ -2062,6 +2180,7 @@ function cancelQuickTextEdit() {
 }
 /* 保存编辑：内容原样写入（不 trim）。空内容视为放弃编辑，而不是删除条目。 */
 function saveQuickTextEdit() {
+  if (!quickTextReady) return;
   const item = quickTextById(editingQuickTextId);
   const value = qtInput.value == null ? "" : String(qtInput.value);
   if (!item || !value.trim()) {
@@ -2078,7 +2197,7 @@ function saveQuickTextEdit() {
   }
   editingQuickTextId = "";
   qtInput.value = "";
-  quickTextsTouched = true;
+  quickTextRevision++;
   setQuickTextNotice("");
   saveQuickTexts();
   renderQuickTexts(item.id);
@@ -2090,10 +2209,16 @@ function loadQuickTexts() {
   } catch (e) {
     parsed = [];
   }
-  applyQuickTexts(parsed);
-  // 上限是硬约束（saveQuickTexts 也会截断）。读取时就对齐，避免列表条数
-  // 和“已达上限”提示不一致，也避免用户下次添加时被静默删掉多余条目。
-  if (Array.isArray(parsed) && parsed.length > QUICK_TEXT_MAX) saveQuickTexts();
+  quickTextLegacy = Array.isArray(parsed);
+  if (parsed && !quickTextLegacy && Array.isArray(parsed.items)) {
+    applyQuickTexts(parsed.items);
+    if (parsed.pending && Array.isArray(parsed.baseItems)) {
+      quickTextBaseItems = copyQuickTexts(parsed.baseItems);
+      quickTextRevision = 1;
+    }
+  } else {
+    applyQuickTexts(parsed);
+  }
   syncQuickTexts();
 }
 /* preferId 让调用方指定要选中的条目：先定下选中项再同步预览，
@@ -2146,8 +2271,14 @@ function renderQuickTextManager() {
         })
         .join("")
     : '<div class="qt-empty">' + esc(L("quickTextEmptyHint")) + "</div>";
+  updateQuickTextForm();
 }
 function addQuickText(rawText) {
+  if (!quickTextReady) return;
+  if (quickTexts.length > QUICK_TEXT_MAX) {
+    setQuickTextNotice("quickTextTooLarge");
+    return;
+  }
   // 不做 trim：保留用户输入的首尾空白与换行，只在整条为空白时拒绝。
   const value = String(rawText === undefined || rawText === null ? "" : rawText);
   if (!value.trim()) return;
@@ -2169,7 +2300,7 @@ function addQuickText(rawText) {
   }
   qtInput.value = "";
   quickTexts = next;
-  quickTextsTouched = true;
+  quickTextRevision++;
   setQuickTextNotice("");
   saveQuickTexts();
   renderQuickTexts(entry.id);
@@ -2194,7 +2325,12 @@ qtAdd.addEventListener("click", function () {
   else addQuickText(qtInput.value);
 });
 qtCancel.addEventListener("click", cancelQuickTextEdit);
+qtRetry.addEventListener("click", function () {
+  if (!quickTextReady) syncQuickTexts();
+  else saveQuickTexts();
+});
 qtInput.addEventListener("keydown", function (e) {
+  if (e.isComposing || e.keyCode === 229 || !quickTextReady) return;
   // Enter 添加/保存；Shift + Enter 在框内换行（常用文本允许包含内部换行）；
   // Esc 放弃编辑；Ctrl/Cmd + Enter 也当作添加，方便习惯快捷键的用户。
   if (e.key === "Escape" && quickTextById(editingQuickTextId)) {
@@ -2209,6 +2345,7 @@ qtInput.addEventListener("keydown", function (e) {
   }
 });
 qtList.addEventListener("click", function (e) {
+  if (!quickTextReady) return;
   const btn = e.target.closest("button[data-qt]");
   if (!btn) return;
   if (btn.dataset.qt === "edit") {
@@ -2220,7 +2357,7 @@ qtList.addEventListener("click", function (e) {
   });
   // 删掉的正好是编辑中的那条时，退出编辑态，避免保存到一个已不存在的条目。
   if (editingQuickTextId === btn.dataset.id) cancelQuickTextEdit();
-  quickTextsTouched = true;
+  quickTextRevision++;
   setQuickTextNotice("");
   saveQuickTexts();
   renderQuickTexts();
@@ -2229,6 +2366,7 @@ copyTextBtn.addEventListener("click", function () {
   copyTextValue(text.value);
 });
 text.addEventListener("keydown", (e) => {
+  if (e.isComposing || e.keyCode === 229) return;
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     // Enter follows the main action: translate when the translate button is

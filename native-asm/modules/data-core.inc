@@ -121,6 +121,29 @@ http_200_json db 'HTTP/1.1 200 OK',13,10
               db 'Content-Type: application/json; charset=utf-8',13,10,13,10
 http_200_json_len = $ - http_200_json
 
+http_200_quicktext db 'HTTP/1.1 200 OK',13,10
+                  db 'Connection: close',13,10
+                  db 'Content-Type: application/json; charset=utf-8',13,10
+                  db 'ETag: "'
+http_200_quicktext_len = $ - http_200_quicktext
+http_204_quicktext db 'HTTP/1.1 204 No Content',13,10
+                  db 'Connection: close',13,10
+                  db 'Content-Length: 0',13,10
+                  db 'ETag: "'
+http_204_quicktext_len = $ - http_204_quicktext
+quicktext_etag db 'missing00'
+quicktext_etag_len = $ - quicktext_etag
+quicktext_header_end db '"',13,10,13,10
+quicktext_header_end_len = $ - quicktext_header_end
+quicktext_hex db '0123456789abcdef'
+if_match_header db 'if-match:'
+if_match_header_len = $ - if_match_header
+
+http_412 db 'HTTP/1.1 412 Precondition Failed',13,10
+         db 'Connection: close',13,10
+         db 'Content-Length: 0',13,10,13,10
+http_412_len = $ - http_412
+
 http_204 db 'HTTP/1.1 204 No Content',13,10
          db 'Connection: close',13,10
          db 'Content-Length: 0',13,10,13,10
